@@ -1,3 +1,6 @@
+## input: position, club, player_name;  xG, G; xA, A
+
+
 library(shiny)
 
 # Define UI for app that draws a histogram ----
