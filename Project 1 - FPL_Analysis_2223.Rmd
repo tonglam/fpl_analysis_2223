@@ -1,0 +1,106 @@
+---
+title: "Project 1 - FPL_Analysis_2223"
+author: "Tong Lan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+# **CITS4009 - Project 1**
+
+## Tong LAN (24056082)
+
+## Introduction
+
+The **Premier League** (legal name: **The Football Association Premier League Limited**) represents the highest level of the [English football league system](https://en.wikipedia.org/wiki/English_football_league_system). Twenty clubs compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season.
+
+(<https://en.wikipedia.org/wiki/Premier_League>)
+
+The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. It contains
+
+Fantasy Premier League(FPL) is the official fantasy football game of English Premier League, played nearly by 8 million managers all across the globe.
+
+The Premier League, also known as the English Premier League or the EPL, is the top level of the English football league system. Contested by 20 clubs, it operates on a system of promotion and relegation with the English Football League. Seasons typically run from August to May with each team playing 38 matches.
+
+<https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023>
+
+## Goal of the project
+
+This project is for exploring the data of 2011-12 season FPL data, find out the relatinship between players and their overall_points, base on their playing position and their value in the FPL.
+
+## Data loading
+
+### load library
+
+```{r}
+library(tidyverse)
+```
+
+#### load data.csv
+
+```{r}
+fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
+```
+
+#### overview the raw data
+
+```{r}
+str(fpl_raw_data)
+summary(fpl_raw_data)
+head(fpl_raw_data)
+```
+
+From the structure of the data we can see, there is 713 rows and 19 columns. Next, we use summary() to glimpse the data. We can find out that each row presents a player, so we have 713 players for the 11-12 season, a player get total points from -3 to 244. average is 28, it is a huge range. Then, we can view the default first 6 rows by use head() function, it shows that each row contains many details including how many goals each player scores, assists and so on.
+
+# Initial transform
+
+The next step we try to do is transforming the data, for a easy understanding. For our goal in this project, we should cut the raw data, and remain field of the below list: First_Name, Second_Name, Club, Position, Total_Points. And we can combine the row "First_Name" and row "Second_Name" to a new Row "Name". So, we create a subset named "fpl_data" for further explore. After that, let's take a look at the structure of fpl_data. Transform the data frame into tibble makes it easiler to manipulate.
+
+Rank the players based on their total_point, adding a new column named "Rank" before column "Name".
+
+```{r}
+raw_field_index <- c(grep("First_Name", colnames(fpl_raw_data)), grep("Second_Name", colnames(fpl_raw_data)), grep("Club", colnames(fpl_raw_data)), grep("Position", colnames(fpl_raw_data)), grep("Total_Points", colnames(fpl_raw_data)))
+fpl_data <- fpl_raw_data[ , raw_field_index] %>% unite("Name", c("First_Name", "Second_Name"), sep = " ") %>% mutate(Rank = 1:713, .before = Name)
+```
+
+
+# visualize
+
+## distribution
+```{r}
+fpl_data %>% ggplot(aes())
+```
+
+
+
+
+
+First, let's take a look at the top 50 scoring player.
+
+```{r}
+fpl_data %>% head(30) %>% arrange(-Rank) %>% View() %>% ggplot(aes(x = Name, y = Total_Points, fill = Position)) + geom_col() + coord_flip()
+```
