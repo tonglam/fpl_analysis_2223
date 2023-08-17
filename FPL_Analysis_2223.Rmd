@@ -1,5 +1,5 @@
 ---
-title: "Project 1 - FPL_Analysis_2223"
+title: "FPL_Analysis_2223"
 author: "Tong Lan"
 date: "`r Sys.Date()`"
 output: html_document
@@ -63,7 +63,8 @@ library(tidyverse)
 #### load data.csv
 
 ```{r}
-fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
+path <- "./FPL_Dataset_2022-2023.csv"
+fpl_raw_data <- read.csv(path)
 ```
 
 #### overview the raw data
