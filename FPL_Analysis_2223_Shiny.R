@@ -136,14 +136,14 @@ server <- function(input, output, session) {
     
     plot_data <- radar_data_filter()
     plot_data <- rbind(c(250, 40, 40, 3420, 20, 20) , rep(0, 6) , plot_data)
-    
+ 
     # color vector
     colors_border = c(rgb(0.2, 0.5, 0.5, 0.9),
-                      rgb(0.8, 0.2, 0.5, 0.9) ,
+                      rgb(0.8, 0.2, 0.5, 0.9),
                       rgb(0.7, 0.5, 0.1, 0.9))
     
     colors_in = c(rgb(0.2, 0.5, 0.5, 0.4),
-                  rgb(0.8, 0.2, 0.5, 0.4) ,
+                  rgb(0.8, 0.2, 0.5, 0.4),
                   rgb(0.7, 0.5, 0.1, 0.4))
     
     # plot with default options:
@@ -169,19 +169,13 @@ server <- function(input, output, session) {
     legend(
       x = 0.7,
       y = 1,
-      legend = rownames(plot_data[-c(1, 2),]),
+      legend = c(input$player1, input$player2),
       bty = "n",
       pch = 20 ,
       col = colors_in ,
       text.col = "grey",
       cex = 1.2,
       pt.cex = 3
-    )
-    
-    radarchart( plot_data  , axistype=1 , 
-                pcol=colors_border , pfcol=colors_in , plwd=4 , plty=1,
-                cglcol="grey", cglty=1, axislabcol="grey", caxislabels=seq(0,20,5), cglwd=0.8,
-                vlcex=0.8 
     )
     
   })

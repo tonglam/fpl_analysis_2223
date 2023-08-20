@@ -58,6 +58,8 @@ This project is for exploring the data of 2011-12 season FPL data, find out the 
 
 ```{r}
 library(tidyverse)
+library(hrbrthemes)
+library(viridis)
 ```
 
 #### load data.csv
@@ -84,17 +86,58 @@ The next step we try to do is transforming the data, for a easy understanding. F
 Rank the players based on their total_point, adding a new column named "Rank" before column "Name".
 
 ```{r}
-raw_field_index <- c(grep("First_Name", colnames(fpl_raw_data)), grep("Second_Name", colnames(fpl_raw_data)), grep("Club", colnames(fpl_raw_data)), grep("Position", colnames(fpl_raw_data)), grep("Total_Points", colnames(fpl_raw_data)))
-fpl_data <- fpl_raw_data[ , raw_field_index] %>% unite("Name", c("First_Name", "Second_Name"), sep = " ") %>% mutate(Rank = 1:713, .before = Name)
+fpl_data <- fpl_raw_data[c(
+  "web_name",
+  "team",
+  "position",
+  "total_points",
+  "now_cost",
+  "minutes",
+  "goals_scored",
+  "expected_goals",
+  "assists",
+  "expected_assists",
+  "clean_sheets",
+  "expected_goals_conceded"
+)] %>%
+  
+  filter(minutes > 1000) %>% 
+  
+  rename(all_of(
+    c(
+      player = "web_name",
+      club = "team",
+      points = "total_points",
+      cost = "now_cost",
+      goals = "goals_scored",
+      xG = "expected_goals",
+      xA = "expected_assists",
+      cs = "clean_sheets",
+      xGc = "expected_goals_conceded"
+    )
+    
+  )) %>%
+  mutate(cost = cost / 10)
 ```
 
 
 # visualize
 
 ## distribution
+
+
+use a violin to see
 ```{r}
-fpl_data %>% ggplot(aes())
+fpl_data %>% ggplot(aes(x=points)) + geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) + ggtitle("Points distribution of players(more than 10000 mins)") + theme_ipsum()
 ```
+
+
+# multiple desity, group by position
+```{r}
+fpl_data %>% ggplot(aes(x=points, group=position, fill=position)) + geom_density(adjust=1.5, alpha=.4) + theme_ipsum() + ylab("")
+```
+
+
 
 
 
