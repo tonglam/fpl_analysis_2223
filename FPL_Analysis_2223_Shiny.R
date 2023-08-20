@@ -1,3 +1,5 @@
+# 1. Radar Chart: FWD and MID compare G and A; DEF and GKP compare GC and
+
 library(tidyverse)
 library(fmsb)
 
@@ -11,38 +13,94 @@ fpl_data <- fpl_raw_data[c(
   "team",
   "position",
   "total_points",
+  "points_per_game",
   "now_cost",
   "minutes",
   "goals_scored",
   "expected_goals",
+  "expected_goals_per_90",
   "assists",
   "expected_assists",
+  "expected_assists_per_90",
+  "goals_conceded",
+  "expected_goals_conceded",
+  "expected_goals_conceded_per_90",
+  "saves",
+  "saves_per_90",
   "clean_sheets",
-  "expected_goals_conceded"
+  "clean_sheets_per_90"
 )] %>%
   
   rename(all_of(
     c(
-      player = "web_name",
-      club = "team",
-      points = "total_points",
-      cost = "now_cost",
-      goals = "goals_scored",
+      Player = "web_name",
+      Club = "team",
+      Position = "position",
+      Points = "total_points",
+      Points90 = "points_per_game",
+      Cost = "now_cost",
+      Minutes = "minutes",
+      Goals = "goals_scored",
       xG = "expected_goals",
-      xA = "expected_assists"
+      xG90 = "expected_goals_per_90",
+      Assists = "assists",
+      xA = "expected_assists",
+      xA90 = "expected_assists_per_90",
+      GC = "goals_conceded",
+      xGc = "expected_goals_conceded",
+      xGc90 = "expected_goals_conceded_per_90",
+      Saves = "saves",
+      Saves90 = "saves_per_90",
+      CS = "clean_sheets",
+      CS90 = "clean_sheets_per_90"
     )
     
   )) %>%
   
-  mutate(cost = cost / 10)
+  mutate(Cost = Cost / 10)
 
 # prepare data for select choices
-positions <-  c("FWD", "MID", "DEF", "GKP")
-clubs <- c(unique(fpl_data$club))
-costs <- c(seq(from = 4, to = 13.5, by = 0.5))
+Positions <-  c("FWD", "MID", "DEF", "GKP")
+Clubs <- c(unique(fpl_data$Club))
+Costs <- c(seq(from = 4, to = 13.5, by = 0.5))
 
-# radar colnames
-radarCols <- c("points",  "goals", "xG", "minutes", "assists", "xA")
+# different position compare different data in radar chart
+get_radarCols <- function(Position) {
+  if (Position == 'FWD' | Position == 'MID') {
+    return (c(
+      "Points",
+      "Assists",
+      "xA",
+      "xA90",
+      "Minutes",
+      "xG90",
+      "xG",
+      "Goals"
+    ))
+  } else if (Position == 'DEF') {
+    return (c(
+      "Points",
+      "GC",
+      "xGc",
+      "xGc90",
+      "Minutes",
+      "CS90",
+      "CS",
+      "Points90"
+    ))
+  } else{
+    return (c(
+      "Points",
+      "GC",
+      "xGc",
+      "xGc90",
+      "Minutes",
+      "Saves90",
+      "Saves",
+      "Points90"
+    ))
+  }
+}
 
 # User interface ----
 ui <- fluidPage(#theme = bslib::bs_theme(bootswatch = "darkly"),
@@ -57,15 +115,15 @@ ui <- fluidPage(#theme = bslib::bs_theme(bootswatch = "darkly"),
       selectInput(
         "club1",
         "Player 1 - Club",
-        choices = clubs,
-        selected = clubs[1]
+        choices = Clubs,
+        selected = Clubs[1]
       ),
       
       selectInput(
         "position1",
         "Player 1 - Position",
-        choices = positions,
-        selected = positions[1]
+        choices = Positions,
+        selected = Positions[1]
       ),
       
       selectInput("player1",
@@ -79,16 +137,14 @@ ui <- fluidPage(#theme = bslib::bs_theme(bootswatch = "darkly"),
       selectInput(
         "club2",
         "Player 2 - Club",
-        choices = clubs,
-        selected = clubs[1]
+        choices = Clubs,
+        selected = Clubs[1]
       ),
       
-      selectInput(
-        "position2",
-        "Player 2 - Position",
-        choices = positions,
-        selected = positions[1]
-      ),
+      selectInput("position2",
+                  "Player 2 - Position",
+                  choices = NULL),
+      
       
       selectInput("player2",
                   "Player 2 - Name",
@@ -105,38 +161,68 @@ ui <- fluidPage(#theme = bslib::bs_theme(bootswatch = "darkly"),
 server <- function(input, output, session) {
   # player 1 filter
   player1_filter <- reactive({
-    fpl_data %>% filter(club == input$club1, position == input$position1) %>% arrange(desc(cost))
+    fpl_data %>% filter(Club == input$club1, Position == input$position1) %>% arrange(desc(Cost))
   })
   
   observeEvent(player1_filter(), {
-    choices <- unique(player1_filter()$player)
+    choices <- unique(player1_filter()$Player)
     updateSelectInput(inputId = "player1", choices = choices)
   })
   
   # player 2 filter
   player2_filter <- reactive({
-    fpl_data %>% filter(club == input$club2, position == input$position2) %>% arrange(desc(cost))
+    fpl_data %>% filter(Club == input$club2,
+                        Position == input$position2,
+                        Player != input$player1) %>% arrange(desc(Cost))
   })
   
   observeEvent(player2_filter(), {
-    choices <- unique(player2_filter()$player)
+    choices <- unique(player2_filter()$Player)
     updateSelectInput(inputId = "player2", choices = choices)
   })
   
+  # player 2 position depends on player 1
+  observeEvent(input$position1, {
+    updateSelectInput(inputId = "position2", choices = c(input$position1))
+  })
+  
+  # # player 2 name cannot be same with player 1
+  # player2_name_filter <- reactive({
+  #   fpl_data %>% filter(Player != input$player1) %>% arrange(desc(Cost))
+  # })
+  #
+  # observeEvent(player2_name_filter(), {
+  #   choices <- unique(player2_name_filter()$Player)
+  #   updateSelectInput(inputId = "player2", choices = choices)
+  # })
+  
   # radar data
   radar_data_filter <- reactive({
-    
     # organize data
     req(input$player1)
     req(input$player2)
-    fpl_data %>% filter(player %in% c(input$player1, input$player2)) %>% select(radarCols)
+    radarCols <- get_radarCols(input$position1)
+    fpl_data %>% filter(Player %in% c(input$player1, input$player2)) %>% select(radarCols)
   })
   
   output$radarMap <- renderPlot({
+    radarCols <- get_radarCols(input$position1)
     
     plot_data <- radar_data_filter()
-    plot_data <- rbind(c(250, 40, 40, 3420, 20, 20) , rep(0, 6) , plot_data)
- 
+    plot_data <-
+      rbind(c(
+        max(fpl_data[radarCols[1]]),
+        max(fpl_data[radarCols[2]]),
+        max(fpl_data[radarCols[3]]),
+        max(fpl_data[radarCols[4]]),
+        max(fpl_data[radarCols[5]]),
+        max(fpl_data[radarCols[6]]),
+        max(fpl_data[radarCols[7]]),
+        max(fpl_data[radarCols[8]])
+      ),
+      rep(0, 8),
+      plot_data)
+    
     # color vector
     colors_border = c(rgb(0.2, 0.5, 0.5, 0.9),
                       rgb(0.8, 0.2, 0.5, 0.9),
@@ -167,7 +253,7 @@ server <- function(input, output, session) {
     
     # add a legend
     legend(
-      x = 0.7,
+      x = 1.2,
       y = 1,
       legend = c(input$player1, input$player2),
       bty = "n",
