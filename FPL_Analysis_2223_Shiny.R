@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(fmsb)
+library(ggrepel)
 
 # load data
 path <- "./FPL_Dataset_2022-2023.csv"
@@ -61,6 +62,7 @@ fpl_data <- fpl_raw_data[c(
 
 # prepare data for select choices
 Positions <-  c("FWD", "MID", "DEF", "GKP")
+Positions_All <-  c("ALL", Positions)
 Clubs <- c(unique(fpl_data$Club))
 Costs <- c(seq(from = 4, to = 13.5, by = 0.5))
 
@@ -103,62 +105,176 @@ get_radarCols <- function(Position) {
 }
 
 # User interface ----
-ui <- fluidPage(#theme = bslib::bs_theme(bootswatch = "darkly"),
+ui <- fluidPage(
+  
+  # theme = bslib::bs_theme(bootswatch = "darkly"),
   
   titlePanel("FPL_Analysis_2223"),
   
-  sidebarLayout(
-    sidebarPanel(
-      # Radar chart to compare two players
+  tabsetPanel(
+    
+    tabPanel(
+      "Compare Players by Value and Position",
       
+      # first tab
+      sidebarLayout(
+        sidebarPanel(
+          sliderInput("value_range", "Value Range", min = 3.5, max = 13.5,value = c(6, 10), step = 0.1),
+            
+                     
+                     
+                    
+        ),
+        mainPanel(plotOutput("scatter"))
+      )
+    ),
+    
+    # second tab
+    tabPanel(
+      "Compare Two Players in Same Positon",
+
+  sidebarLayout(sidebarPanel(tabsetPanel(
+    tabPanel(
+      "Player 1",
+      br(),
       # player1
-      selectInput(
-        "club1",
-        "Player 1 - Club",
-        choices = Clubs,
-        selected = Clubs[1]
-      ),
+      selectInput("club1",
+                  "Club",
+                  choices = Clubs,
+                  selected = Clubs[1]),
       
       selectInput(
         "position1",
-        "Player 1 - Position",
+        "Position",
         choices = Positions,
         selected = Positions[1]
       ),
       
       selectInput("player1",
-                  "Player 1 - Name",
-                  choices = NULL),
-      
-      br(),
-      br(),
-      
-      # player2
-      selectInput(
-        "club2",
-        "Player 2 - Club",
-        choices = Clubs,
-        selected = Clubs[1]
-      ),
-      
-      selectInput("position2",
-                  "Player 2 - Position",
-                  choices = NULL),
-      
-      
-      selectInput("player2",
-                  "Player 2 - Name",
+                  "Name",
                   choices = NULL),
       
     ),
     
-    mainPanel(plotOutput("radarMap"))
+    tabPanel(
+      "Player 2",
+      br(),
+      # player2
+      selectInput("club2",
+                  "Club",
+                  choices = Clubs,
+                  selected = Clubs[1]),
+      
+      selectInput("position2",
+                  "Position",
+                  choices = NULL),
+      
+      
+      selectInput("player2",
+                  "Name",
+                  choices = NULL),
+      
+    )
     
-  ))
+  )),
+  
+  mainPanel(plotOutput("radar")),)
+    ),
+  
+  )
+  
+)
 
 
 # Server logic ----
 server <- function(input, output, session) {
+
+  # tab 1 - scatterplot
+  output$scatter <- renderPlot({
+    
+    plot_data <- fpl_data %>%
+         filter(Points > 50) %>% 
+         filter(Cost >= input$value_range[1], Cost <= input$value_range[2])
+    value_position <- input$value_position
+   
+    
+    ggplot(plot_data, aes(x = Points, y = Cost)) +
+      geom_point(
+        aes(color = Position, shape = Position),
+        size = 1.5, 
+        alpha = 0.8
+      ) +
+      scale_color_manual(
+        values = c("#386cb0", "#fdb462", "#7fc97f", "red")
+      ) +
+      geom_text_repel(
+        aes(label = Player),
+        family = "Poppins",
+        size = 3,
+        min.segment.length = 0, 
+        seed = 42, 
+        box.padding = 0.5,
+        max.overlaps = Inf,
+        nudge_x = .15,
+        nudge_y = .5,
+        color = "grey50"
+      ) +
+    labs(
+      title = "Points Positiopns",
+      subtitle = "later",
+      x = "total_points",
+      y = "cost(m)"
+    ) +  
+      theme(
+        # The default font when not explicitly specified
+        text = element_text(family = "Lobster Two", size = 8, color = "black"),
+        
+        # Customize legend text, position, and background.
+        legend.text = element_text(size = 9, family = "Roboto"),
+        legend.position = c(1, 0),
+        legend.justification = c(1, 0),
+        legend.background = element_blank(),
+        # This one removes the background behind each key in the legend
+        legend.key = element_blank(),
+        
+        # Customize title and subtitle font/size/color
+        plot.title = element_text(
+          family = "Lobster Two", 
+          size = 20,
+          face = "bold", 
+          color = "#2a475e"
+        ),
+        plot.subtitle = element_text(
+          family = "Lobster Two", 
+          size = 15, 
+          face = "bold", 
+          color = "#1b2838"
+        ),
+        plot.title.position = "plot",
+        
+        # Adjust axis parameters such as size and color.
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 12),
+        axis.ticks = element_blank(),
+        # Axis lines are now lighter than default
+        axis.line = element_line(colour = "grey50"),
+        
+        # Only keep y-axis major grid lines, with a grey color and dashed type.
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "#b4aea9", linetype ="dashed"),
+        
+        # Use a light color for the background of the plot and the panel.
+        panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+        plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
+      )
+    
+    
+    
+  })
+  
+  
+  # tab 2 - radar
   # player 1 filter
   player1_filter <- reactive({
     fpl_data %>% filter(Club == input$club1, Position == input$position1) %>% arrange(desc(Cost))
@@ -186,16 +302,6 @@ server <- function(input, output, session) {
     updateSelectInput(inputId = "position2", choices = c(input$position1))
   })
   
-  # # player 2 name cannot be same with player 1
-  # player2_name_filter <- reactive({
-  #   fpl_data %>% filter(Player != input$player1) %>% arrange(desc(Cost))
-  # })
-  #
-  # observeEvent(player2_name_filter(), {
-  #   choices <- unique(player2_name_filter()$Player)
-  #   updateSelectInput(inputId = "player2", choices = choices)
-  # })
-  
   # radar data
   radar_data_filter <- reactive({
     # organize data
@@ -205,7 +311,7 @@ server <- function(input, output, session) {
     fpl_data %>% filter(Player %in% c(input$player1, input$player2)) %>% select(radarCols)
   })
   
-  output$radarMap <- renderPlot({
+  output$radar <- renderPlot({
     radarCols <- get_radarCols(input$position1)
     
     plot_data <- radar_data_filter()
