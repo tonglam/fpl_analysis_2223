@@ -2,11 +2,15 @@
 title: "FPL_Analysis_2223"
 author: "Tong Lan"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document: 
+    code_folding: show
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(warning = FALSE)
 ```
 
 # **CITS4009 - Project 1**
@@ -35,32 +39,35 @@ This project is for exploring the data of 2011-12 season FPL data, find out the 
 
 ### load library
 
-```{r}
+```{r load library, message=FALSE}
+library(shiny)
+library(shinyjs)
 library(tidyverse)
 library(hrbrthemes)
 library(viridis)
+library(fmsb)
+library(ggrepel)
 ```
 
 #### load data.csv
 
-```{r}
+```{r load data file, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
 
 #### overview the data
-
-```{r}
+```{r str, results='hide'}
 str(fpl_raw_data)
 ```
 
 From the structure of the data we can see, there is 713 rows and 19 columns. Next, we use summary() to glimpse the data. We can find out that each row presents a player, so we have 713 players for the 11-12 season, a player get total points from -3 to 244. average is 28, it is a huge range. Then, we can view the default first 6 rows by use head() function, it shows that each row contains many details including how many goals each player scores, assists and so on.
 
-```{r}
+```{r summary, results='hide'}
 summary(fpl_raw_data)
 ```
 
-```{r}
+```{r head, results='hide'}
 head(fpl_raw_data)
 ```
 
@@ -70,102 +77,496 @@ The next step we try to do is transforming the data, for a easy understanding. F
 
 Rank the players based on their total_point, adding a new column named "Rank" before column "Name".
 
-```{r}
+```{r transform, echo=TRUE}
+# transform data
 fpl_data <- fpl_raw_data[c(
   "web_name",
   "team",
   "position",
   "total_points",
+  "points_per_game",
   "now_cost",
   "minutes",
   "goals_scored",
   "expected_goals",
+  "expected_goals_per_90",
   "assists",
   "expected_assists",
+  "expected_assists_per_90",
+  "goals_conceded",
+  "expected_goals_conceded",
+  "expected_goals_conceded_per_90",
+  "saves",
+  "saves_per_90",
   "clean_sheets",
-  "expected_goals_conceded"
+  "clean_sheets_per_90"
 )] %>%
-  
-  filter(minutes > 1000) %>% 
   
   rename(all_of(
     c(
-      player = "web_name",
-      club = "team",
-      points = "total_points",
-      cost = "now_cost",
-      goals = "goals_scored",
+      Player = "web_name",
+      Club = "team",
+      Position = "position",
+      Points = "total_points",
+      Points90 = "points_per_game",
+      Cost = "now_cost",
+      Minutes = "minutes",
+      Goals = "goals_scored",
       xG = "expected_goals",
+      xG90 = "expected_goals_per_90",
+      Assists = "assists",
       xA = "expected_assists",
-      cs = "clean_sheets",
-      xGc = "expected_goals_conceded"
+      xA90 = "expected_assists_per_90",
+      GC = "goals_conceded",
+      xGc = "expected_goals_conceded",
+      xGc90 = "expected_goals_conceded_per_90",
+      Saves = "saves",
+      Saves90 = "saves_per_90",
+      CS = "clean_sheets",
+      CS90 = "clean_sheets_per_90"
     )
     
   )) %>%
-  mutate(cost = cost / 10)
+  
+  mutate(Cost = Cost / 10)
+
+# show the table(first six rows)
+knitr::kable(fpl_data[1:5, ], caption =  "first 5 rows of fpl_data")
+```
+
+```{r constants, include=FALSE}
+Positions <-  c("FWD", "MID", "DEF", "GKP")
+Positions_All <-  c("ALL", Positions)
+Clubs <- c(unique(fpl_data$Club))
+Costs <- c(seq(from = 4, to = 13.5, by = 0.5))
 ```
 
 # visualize
 
 ## top 50 players
 
-```{r}
-fpl_data %>% 
-  ggplot(aes(x=points)) +
-    geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
-    ggtitle("Points distribution of players(more than 10000 mins)") +
-    theme_ipsum()
+```{r desity}
+fpl_data %>%
+  ggplot(aes(x = Points)) +
+  geom_density(fill = "#69b3a2",
+               color = "#e9ecef",
+               alpha = 0.8) +
+  ggtitle("Points distribution of players(more than 10000 mins)") +
+  ylab("") +
+  theme_ipsum()
 ```
 
 # multiple desity, group by position
 
-```{r}
-fpl_data %>% 
-  ggplot(aes(x=points, group=position, fill=position)) +
-    geom_density(adjust=1.5, alpha=.4) + 
-    theme_ipsum() +
-    ylab("")
+```{r multiple desity}
+fpl_data %>%
+  ggplot(aes(x = Points, group = Position, fill = Position)) +
+  geom_density(adjust = 1.5, alpha = 0.4) +
+  ylab("") +
+  theme_ipsum()
 ```
 
 # look at the top 50 players
 
-```{r, echo = False}
-fpl_data %>% 
-  arrange(-points) %>% 
-  head(50) %>% 
-  ggplot(aes(x = player, y = points)) +
-    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=0.8) +
-    geom_text(aes(label=points), position = position_stack(vjust = 0.9), size = 2) +
-    coord_flip() +
-    theme(axis.text.y = element_text(size = rel(0.8)))+
-    xlab("") +
-    theme_bw()
+```{r barplot}
+#####sort later fct_order()
+fpl_data %>%
+  arrange(-Points) %>%
+  head(50) %>%
+  ggplot(aes(x = Player, y = Points)) +
+  geom_bar(
+    stat = "identity",
+    fill = "#69b3a2",
+    alpha = 0.6,
+    width = 0.8
+  ) +
+  geom_text(aes(label = Points),
+            position = position_stack(vjust = 1),
+            size = 2) +
+  coord_flip() +
+  theme(axis.text.y = element_text(size = rel(0.8))) +
+  xlab("") +
+  theme_bw()
 ```
 
 # points and positons
 
-```{r}
+```{r doughut}
 # create data
-doughnut_data <- aggregate(fpl_data$points, by = list(position = fpl_data$position), FUN = sum)
+doughnut_data <-
+  aggregate(fpl_data$Points,
+            by = list(Position = fpl_data$Position),
+            FUN = sum)
 
 # percentages
 doughnut_data$percentage = doughnut_data$x / sum(doughnut_data$x)
 doughnut_data$ymax = cumsum(doughnut_data$percentage)
-doughnut_data$ymin = c(0, head(doughnut_data$ymax, n=-1))
-doughnut_data$labelPosition <- (doughnut_data$ymax + doughnut_data$ymin) / 2
-doughnut_data$label <- as.character(round(doughnut_data$percentage, 2) * 100) + '%'
+doughnut_data$ymin = c(0, head(doughnut_data$ymax, n = -1))
+doughnut_data$labelPosition <-
+  (doughnut_data$ymax + doughnut_data$ymin) / 2
+doughnut_data$label <-
+  paste(round(doughnut_data$percentage, 2) * 100, "%", sep = "")
 
 # plot
-doughnut_data %>% 
-ggplot(aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3, fill = position)) +
-     geom_rect() +
-     coord_polar(theta = "y") + 
-#     geom_label(x = 3.5, aes(y = labelPosition, label = label), size = 6) +
-     scale_fill_brewer(palette = 2) +
-     xlim(c(2, 4)) +
-     theme_void()
+doughnut_data %>%
+  ggplot(aes(
+    ymax = ymax,
+    ymin = ymin,
+    xmax = 4,
+    xmin = 3,
+    fill = Position
+  )) +
+  geom_rect() +
+  coord_polar(theta = "y") +
+  geom_label(x = 3.5,
+             aes(y = labelPosition, label = label),
+             size = 6) +
+  scale_fill_brewer(palette = 2) +
+  xlim(c(2, 4)) +
+  ggtitle("title later") +
+  theme_void()
 ```
 
+# values and points
+```{r shiny_scatter}
+ui <- fluidPage(sidebarLayout(sidebarPanel(
+  sliderInput(
+    "value_range",
+    "Value Range",
+    min = 3.5,
+    max = 13.5,
+    value = c(6, 10),
+    step = 0.1
+  )
+),
+mainPanel(plotOutput("scatter"))))
+
+server <- function(input, output, session) {
+  output$scatter <- renderPlot({
+    plot_data <- fpl_data %>%
+      filter(Points > 50) %>%
+      filter(Cost >= input$value_range[1], Cost <= input$value_range[2])
+    
+    ggplot(plot_data, aes(x = Points, y = Cost)) +
+      geom_point(aes(color = Position, shape = Position),
+                 size = 1.5,
+                 alpha = 0.8) +
+      scale_color_manual(values = c("#386cb0", "#fdb462", "#7fc97f", "red")) +
+      geom_text_repel(
+        aes(label = Player),
+        family = "Poppins",
+        size = 3,
+        min.segment.length = 0,
+        seed = 42,
+        box.padding = 0.5,
+        max.overlaps = Inf,
+        nudge_x = .15,
+        nudge_y = .5,
+        color = "grey50"
+      ) +
+      labs(
+        title = "Compare Players Points",
+        subtitle = "compare players in the value range",
+        x = "total_points",
+        y = "cost(m)"
+      ) +
+      theme(
+        # The default font when not explicitly specified
+        text = element_text(
+          family = "Lobster Two",
+          size = 8,
+          color = "black"
+        ),
+        
+        # Customize legend text, position, and background.
+        legend.text = element_text(size = 9, family = "Roboto"),
+        legend.position = c(1, 0),
+        legend.justification = c(1, 0),
+        legend.background = element_blank(),
+        # This one removes the background behind each key in the legend
+        legend.key = element_blank(),
+        
+        # Customize title and subtitle font/size/color
+        plot.title = element_text(
+          family = "Lobster Two",
+          size = 20,
+          face = "bold",
+          color = "#2a475e"
+        ),
+        plot.subtitle = element_text(
+          family = "Lobster Two",
+          size = 15,
+          face = "bold",
+          color = "#1b2838"
+        ),
+        plot.title.position = "plot",
+        
+        # Adjust axis parameters such as size and color.
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 12),
+        axis.ticks = element_blank(),
+        # Axis lines are now lighter than default
+        axis.line = element_line(colour = "grey50"),
+        
+        # Only keep y-axis major grid lines, with a grey color and dashed type.
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "#b4aea9", linetype =
+                                            "dashed"),
+        
+        # Use a light color for the background of the plot and the panel.
+        panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+        plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
+      )
+    
+  })
+}
+
+shinyApp(ui, server)
+```
+
+
+# high value(premium) players have a higher conver rate, are closer to the expected values
+
+```{r mirror_histogram}
+
+```
+
+```{r radar}
+# different position compare different data in radar chart
+get_radarCols <- function(Position) {
+  if (Position == 'FWD' | Position == 'MID') {
+    return (c(
+      "Points",
+      "Assists",
+      "xA",
+      "xA90",
+      "Minutes",
+      "xG90",
+      "xG",
+      "Goals"
+    ))
+  } else if (Position == 'DEF') {
+    return (c(
+      "Points",
+      "GC",
+      "xGc",
+      "xGc90",
+      "Minutes",
+      "CS90",
+      "CS",
+      "Points90"
+    ))
+  } else{
+    return (c(
+      "Points",
+      "GC",
+      "xGc",
+      "xGc90",
+      "Minutes",
+      "Saves90",
+      "Saves",
+      "Points90"
+    ))
+  }
+}
+
+ui <- fluidPage(sidebarLayout(sidebarPanel(tabsetPanel(
+  tabPanel(
+    "Player 1",
+    br(),
+    # player1
+    selectInput("club1",
+                "Club",
+                choices = Clubs,
+                selected = Clubs[1]),
+    
+    selectInput(
+      "position1",
+      "Position",
+      choices = Positions,
+      selected = Positions[1]
+    ),
+    
+    selectInput("player1",
+                "Name",
+                choices = NULL),
+    
+    textInput("value1",
+              "Value",
+              value = NULL)
+    
+  ),
+  
+  tabPanel(
+    "Player 2",
+    br(),
+    # player2
+    selectInput("club2",
+                "Club",
+                choices = Clubs,
+                selected = Clubs[1]),
+    
+    selectInput("position2",
+                "Position",
+                choices = NULL),
+    
+    
+    selectInput("player2",
+                "Name",
+                choices = NULL),
+    
+    textInput("value2",
+              "Value",
+              value = NULL),
+  )
+)),
+mainPanel(plotOutput("radar")),))
+server <- function(input, output, session) {
+  # player 1 filter
+  player1_filter <- reactive({
+    fpl_data %>%
+      filter(Club == input$club1, Position == input$position1) %>%
+      arrange(desc(Cost))
+  })
+  
+  observeEvent(player1_filter(), {
+    choices <- unique(player1_filter()$Player)
+    updateSelectInput(inputId = "player1", choices = choices)
+  })
+  
+  # player 2 filter
+  player2_filter <- reactive({
+    fpl_data %>%
+      filter(Club == input$club2,
+             Position == input$position2,
+             Player != input$player1) %>%
+      arrange(desc(Cost))
+  })
+  
+  observeEvent(player2_filter(), {
+    choices <- unique(player2_filter()$Player)
+    updateSelectInput(inputId = "player2", choices = choices)
+  })
+  
+  # player 2 position depends on player 1
+  observeEvent(input$position1, {
+    updateSelectInput(inputId = "position2", choices = c(input$position1))
+  })
+  
+  # player 1 value depends on player 1 name
+  player1_value_filter <- reactive({
+    value_player <-  fpl_data %>%
+      filter(Player == input$player1)
+    value_player$Cost
+  })
+  
+  observeEvent(input$player1, {
+    player1_value_text <- paste0(player1_value_filter(), "m", seq = "")
+    updateTextInput(inputId = "value1", value = player1_value_text)
+  })
+  
+  # player 2 value depends on player 2 name
+  player2_value_filter <- reactive({
+    value_player <-  fpl_data %>%
+      filter(Player == input$player2)
+    value_player$Cost
+  })
+  
+  observeEvent(input$player2, {
+    player2_value_text <- paste0(player2_value_filter(), "m", seq = "")
+    updateTextInput(inputId = "value2", value = player2_value_text)
+  })
+  
+  # radar data
+  radar_data_filter <- reactive({
+    # organize data
+    req(input$player1)
+    req(input$player2)
+    radarCols <- get_radarCols(input$position1)
+    fpl_data %>%
+      filter(Player %in% c(input$player1, input$player2)) %>%
+      select(all_of(radarCols))
+  })
+  
+  output$radar <- renderPlot({
+    radarCols <- get_radarCols(input$position1)
+    plot_data <- radar_data_filter()
+    plot_data <-
+      rbind(c(
+        max(fpl_data[radarCols[1]]),
+        max(fpl_data[radarCols[2]]),
+        max(fpl_data[radarCols[3]]),
+        max(fpl_data[radarCols[4]]),
+        max(fpl_data[radarCols[5]]),
+        max(fpl_data[radarCols[6]]),
+        max(fpl_data[radarCols[7]]),
+        max(fpl_data[radarCols[8]])
+      ),
+      rep(0, 8),
+      plot_data)
+    
+    # color vector
+    colors_border = c(rgb(0.2, 0.5, 0.5, 0.9),
+                      rgb(0.8, 0.2, 0.5, 0.9),
+                      rgb(0.7, 0.5, 0.1, 0.9))
+    
+    colors_in = c(rgb(0.2, 0.5, 0.5, 0.4),
+                  rgb(0.8, 0.2, 0.5, 0.4),
+                  rgb(0.7, 0.5, 0.1, 0.4))
+    
+    # plot with default options:
+    radarchart(
+      plot_data,
+      axistype = 1 ,
+      #custom polygon
+      pcol = colors_border ,
+      pfcol = colors_in ,
+      plwd = 4 ,
+      plty = 1,
+      #custom the grid
+      cglcol = "grey",
+      cglty = 1,
+      axislabcol = "grey",
+      caxislabels = seq(0, 20, 5),
+      cglwd = 0.8,
+      #custom labels
+      vlcex = 0.8
+    )
+    
+    # add a legend
+    legend(
+      x = 1.2,
+      y = 1,
+      legend = c(input$player1, input$player2),
+      bty = "n",
+      pch = 20 ,
+      col = colors_in ,
+      text.col = "grey",
+      cex = 1.2,
+      pt.cex = 3
+    )
+  })
+}
+
+shinyApp(ui, server)
+```
+
+
+# will club make a high xG coverted rate player to be a pk taker?
+
+```{r xG, results='hide'}
+# add a column, shows the xG diff with goals
+fpl_data %>% 
+  mutate(xG_diff = Goals - xG, .after = xG)
+
+
+```
+
+```{r xG_table, echo=FALSE}
+# table
+knitr::kable(fpl_data[1:5, ])
+```
 
 
 
