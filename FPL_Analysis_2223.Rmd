@@ -9,27 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
-
 # **CITS4009 - Project 1**
 
 ## Tong LAN (24056082)
@@ -69,15 +48,21 @@ path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
 
-#### overview the raw data
+#### overview the data
 
 ```{r}
 str(fpl_raw_data)
-summary(fpl_raw_data)
-head(fpl_raw_data)
 ```
 
 From the structure of the data we can see, there is 713 rows and 19 columns. Next, we use summary() to glimpse the data. We can find out that each row presents a player, so we have 713 players for the 11-12 season, a player get total points from -3 to 244. average is 28, it is a huge range. Then, we can view the default first 6 rows by use head() function, it shows that each row contains many details including how many goals each player scores, assists and so on.
+
+```{r}
+summary(fpl_raw_data)
+```
+
+```{r}
+head(fpl_raw_data)
+```
 
 # Initial transform
 
@@ -120,31 +105,67 @@ fpl_data <- fpl_raw_data[c(
   mutate(cost = cost / 10)
 ```
 
-
 # visualize
 
-## distribution
+## top 50 players
 
-
-use a violin to see
 ```{r}
-fpl_data %>% ggplot(aes(x=points)) + geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) + ggtitle("Points distribution of players(more than 10000 mins)") + theme_ipsum()
+fpl_data %>% 
+  ggplot(aes(x=points)) +
+    geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+    ggtitle("Points distribution of players(more than 10000 mins)") +
+    theme_ipsum()
 ```
-
 
 # multiple desity, group by position
+
 ```{r}
-fpl_data %>% ggplot(aes(x=points, group=position, fill=position)) + geom_density(adjust=1.5, alpha=.4) + theme_ipsum() + ylab("")
+fpl_data %>% 
+  ggplot(aes(x=points, group=position, fill=position)) +
+    geom_density(adjust=1.5, alpha=.4) + 
+    theme_ipsum() +
+    ylab("")
+```
+
+# look at the top 50 players
+
+```{r, echo = False}
+fpl_data %>% 
+  arrange(-points) %>% 
+  head(50) %>% 
+  ggplot(aes(x = player, y = points)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=0.8) +
+    geom_text(aes(label=points), position = position_stack(vjust = 0.9), size = 2) +
+    coord_flip() +
+    theme(axis.text.y = element_text(size = rel(0.8)))+
+    xlab("") +
+    theme_bw()
+```
+
+# points and positons
+
+```{r}
+# create data
+doughnut_data <- aggregate(fpl_data$points, by = list(position = fpl_data$position), FUN = sum)
+
+# percentages
+doughnut_data$percentage = doughnut_data$x / sum(doughnut_data$x)
+doughnut_data$ymax = cumsum(doughnut_data$percentage)
+doughnut_data$ymin = c(0, head(doughnut_data$ymax, n=-1))
+doughnut_data$labelPosition <- (doughnut_data$ymax + doughnut_data$ymin) / 2
+doughnut_data$label <- as.character(round(doughnut_data$percentage, 2) * 100) + '%'
+
+# plot
+doughnut_data %>% 
+ggplot(aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3, fill = position)) +
+     geom_rect() +
+     coord_polar(theta = "y") + 
+#     geom_label(x = 3.5, aes(y = labelPosition, label = label), size = 6) +
+     scale_fill_brewer(palette = 2) +
+     xlim(c(2, 4)) +
+     theme_void()
 ```
 
 
 
 
-
-
-
-First, let's take a look at the top 50 scoring player.
-
-```{r}
-fpl_data %>% head(30) %>% arrange(-Rank) %>% View() %>% ggplot(aes(x = Name, y = Total_Points, fill = Position)) + geom_col() + coord_flip()
-```
