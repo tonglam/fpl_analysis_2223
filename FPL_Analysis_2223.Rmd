@@ -328,7 +328,24 @@ shinyApp(ui, server)
 
 # high value(premium) players have a higher conver rate, are closer to the expected values
 
+# data_transform, divide players by group, step = 1
+column: player, cost, points, avg_points, avg_goals, avg_xG, avg_assists, avg_xA, avg_GC, avg_xGc
+```{r value_points, results='hide'}
+
+```
+
+
+
 ```{r mirror_histogram}
+
+x1 = rnorm(100)
+x2 = rnorm(100)+rep(2,100)
+par(mfrow=c(2,1))
+
+par(mar=c(0,5,3,3))
+hist(x1 , main="" , xlim=c(-2,5), ylab="Frequency for x1", xlab="", ylim=c(0,25) , xaxt="n", las=1 , col="slateblue1", breaks=10)
+par(mar=c(5,5,0,3))
+hist(x2 , main="" , xlim=c(-2,5), ylab="Frequency for x2", xlab="Value of my variable", ylim=c(25,0) , las=1 , col="tomato3"  , breaks=10)
 
 ```
 
