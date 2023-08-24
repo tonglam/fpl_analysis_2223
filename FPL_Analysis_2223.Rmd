@@ -723,16 +723,19 @@ knitr::kable(fpl_data[1:5, ], caption = "first 5 rows of fpl_data after adding d
 ```
 
 ```{r multi group line}
+var <- fpl_data %>% filter(Goals > 5) %>% select(c("Cost", "Goals90","xG90"))
+
 tmp_data <- data.frame(
-  var1 = fpl_data$Goals,
-  var2 = fpl_data$xG
+  type = c("Goals90", "xG90"),
+  value = c(var$Goals90, var$xG90)
 )
 
-p <- ggplot(tmp_data, aes(x = x)) +
-  geom_histogram(aes(x = var1, y = ..density..), fill = "#69b3a2") +
-  geom_histogram(aes(x = var2, y = -..density..), fill = "#404080") +
-  theme_ipsum() +
-  xlab("value of x")
+p <- tmp_data %>%
+  ggplot(aes(x=value, fill=type)) +
+    geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity') +
+    scale_fill_manual(values=c("#69b3a2", "#404080")) +
+    theme_ipsum() +
+    labs(fill="")
 
 p
 ```
