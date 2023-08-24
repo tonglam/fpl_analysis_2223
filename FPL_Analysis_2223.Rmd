@@ -57,6 +57,12 @@ fpl_raw_data <- read.csv(path)
 ```
 
 #### overview the data
+
+```{r, results='hide'}
+glimpse(fpl_raw_data)
+```
+
+
 ```{r str, results='hide'}
 str(fpl_raw_data)
 ```
@@ -78,6 +84,17 @@ The next step we try to do is transforming the data, for a easy understanding. F
 Rank the players based on their total_point, adding a new column named "Rank" before column "Name".
 
 ```{r transform, echo=TRUE}
+# get level function
+get_cost_level <- function(cost_bin) {
+  levels <- levels(fpl_data$Cost_bin)
+  case_when(
+    cost_bin == levels[1] ~ "Low",
+    cost_bin == levels[2] ~ "Mid",
+    cost_bin == levels[3] ~ "Premium",
+    .default = NA
+  )
+}
+
 # transform data
 fpl_data <- fpl_raw_data[c(
   "web_name",
@@ -128,10 +145,21 @@ fpl_data <- fpl_raw_data[c(
     
   )) %>%
   
-  mutate(Cost = Cost / 10)
+  # cost is 10 times larger because it is easier to store a integer in the database
+  # now we can return it to the actual value by diving 10
+  mutate(Cost = Cost / 10) %>%
+  
+  # separate the player into three group by their values
+  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
+  
+  # category player level by their values
+  mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin)
+
+# remove data: fpl_raw_data to save memory
+# rm(fpl_raw_data)
 
 # show the table(first six rows)
-knitr::kable(fpl_data[1:5, ], caption =  "first 5 rows of fpl_data")
+knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
 ```
 
 ```{r constants, include=FALSE}
@@ -166,49 +194,49 @@ fpl_data %>%
   theme_ipsum()
 ```
 
-# look at the top 50 players
+# look at the top 30 players
 
-```{r barplot}
-#####sort later fct_order()
+```{r barplot, fig.height=12}
 fpl_data %>%
   arrange(-Points) %>%
   head(50) %>%
-  ggplot(aes(x = Player, y = Points)) +
-  geom_bar(
-    stat = "identity",
-    fill = "#69b3a2",
-    alpha = 0.6,
-    width = 0.8
+  mutate(Player = fct_reorder(Player, Points)) %>%
+  ggplot(aes(x = Player, y = Points, fill = Position)) +
+  geom_bar(stat = "identity",
+           alpha = 0.8,
+           width = 0.8) +
+  geom_label(
+    aes(y = Points, label = Points),
+    position = position_stack(vjust = 1),
+    size = 3,
+    show.legend = F
   ) +
-  geom_text(aes(label = Points),
-            position = position_stack(vjust = 1),
-            size = 2) +
   coord_flip() +
-  theme(axis.text.y = element_text(size = rel(0.8))) +
+  scale_color_brewer(palette = 3) +
   xlab("") +
-  theme_bw()
+  theme_ipsum()
 ```
 
 # points and positons
 
 ```{r doughut}
-# create data
-doughnut_data <-
-  aggregate(fpl_data$Points,
-            by = list(Position = fpl_data$Position),
-            FUN = sum)
-
-# percentages
-doughnut_data$percentage = doughnut_data$x / sum(doughnut_data$x)
-doughnut_data$ymax = cumsum(doughnut_data$percentage)
-doughnut_data$ymin = c(0, head(doughnut_data$ymax, n = -1))
-doughnut_data$labelPosition <-
-  (doughnut_data$ymax + doughnut_data$ymin) / 2
-doughnut_data$label <-
-  paste(round(doughnut_data$percentage, 2) * 100, "%", sep = "")
-
-# plot
-doughnut_data %>%
+# the beauty of %>%
+aggregate(fpl_data$Points,
+          by = list(Position = fpl_data$Position),
+          FUN = sum) %>%
+  mutate(
+    percentage = x / sum(x),
+    ymax = cumsum(percentage),
+    ymin = c(0, head(ymax, n = -1)),
+    labelPosition = (ymax + ymin) / 2,
+    label = paste(
+      Position,
+      "\n",
+      round(percentage, 2) * 100,
+      "%",
+      sep = ""
+    )
+  ) %>%
   ggplot(aes(
     ymax = ymax,
     ymin = ymin,
@@ -220,11 +248,12 @@ doughnut_data %>%
   coord_polar(theta = "y") +
   geom_label(x = 3.5,
              aes(y = labelPosition, label = label),
-             size = 6) +
-  scale_fill_brewer(palette = 2) +
+             size = 5) +
+  scale_fill_brewer(palette = 4) +
+  scale_color_brewer(palette = 3) +
   xlim(c(2, 4)) +
-  ggtitle("title later") +
-  theme_void()
+  theme_void() +
+  theme(legend.position = "none")
 ```
 
 # values and points
@@ -323,6 +352,13 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+```
+
+
+```{r boxplot}
+fpl_data %>% 
+  ggplot(aes(x = Level, y = Pointsis))+
+  geom_boxplot()
 ```
 
 
@@ -573,9 +609,15 @@ shinyApp(ui, server)
 # will club make a high xG coverted rate player to be a pk taker?
 
 ```{r xG, results='hide'}
+# fpl_data %>% mutate(Cost_bin = cut_interval(fpl_data$Cost, 3)) %>% View()
+
+
+
+
+
 # add a column, shows the xG diff with goals
-fpl_data %>% 
-  mutate(xG_diff = Goals - xG, .after = xG)
+# fpl_data %>% 
+#  mutate(xG_diff = Goals - xG, .after = xG)
 
 
 ```
