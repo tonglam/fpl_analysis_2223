@@ -1,8 +1,8 @@
-# 1. Radar Chart: FWD and MID compare G and A; DEF and GKP compare GC and
-
 library(tidyverse)
 library(fmsb)
 library(ggrepel)
+library(patchwork)
+library(hrbrthemes)
 
 # load data
 path <- "./FPL_Dataset_2022-2023.csv"
@@ -65,6 +65,7 @@ Positions <-  c("FWD", "MID", "DEF", "GKP")
 Positions_All <-  c("ALL", Positions)
 Clubs <- c(unique(fpl_data$Club))
 Costs <- c(seq(from = 4, to = 13.5, by = 0.5))
+ShowDatas <- c("G & xG", "A &x A", "Gc & xGc") 
 
 # different position compare different data in radar chart
 get_radarCols <- function(Position) {
@@ -105,129 +106,140 @@ get_radarCols <- function(Position) {
 }
 
 # User interface ----
-ui <- fluidPage(
-  
-  # theme = bslib::bs_theme(bootswatch = "darkly"),
+ui <- fluidPage(# theme = bslib::bs_theme(bootswatch = "darkly"),
   
   titlePanel("FPL_Analysis_2223"),
   
   tabsetPanel(
-    
     tabPanel(
       "Compare Players by Value and Position",
       
+      br(),
+      br(),
+      br(),
+      
       # first tab
-      sidebarLayout(
-        sidebarPanel(
-          sliderInput("value_range", "Value Range", min = 3.5, max = 13.5,value = c(6, 10), step = 0.1),
-            
-                     
-                     
-                    
+      sidebarLayout(sidebarPanel(
+        sliderInput(
+          "value_range",
+          "Value Range",
+          min = 3.5,
+          max = 13.5,
+          value = c(6, 10),
+          step = 0.1
         ),
-        mainPanel(plotOutput("scatter"))
-      )
+        
+        br(),
+        br(),
+        br(),
+        
+        selectInput("dualY", "Show Data", choices = ShowDatas, selected = ShowDatas[0])
+        
+        
+        
+      ),
+      mainPanel(plotOutput("scatter"), plotOutput("aaa")))
     ),
     
     # second tab
     tabPanel(
       "Compare Two Players in Same Positon",
-
-  sidebarLayout(sidebarPanel(tabsetPanel(
-    tabPanel(
-      "Player 1",
+      
       br(),
-      # player1
-      selectInput("club1",
-                  "Club",
-                  choices = Clubs,
-                  selected = Clubs[1]),
+      br(),
+      br(),
       
-      selectInput(
-        "position1",
-        "Position",
-        choices = Positions,
-        selected = Positions[1]
-      ),
+      sidebarLayout(sidebarPanel(tabsetPanel(
+        tabPanel(
+          "Player 1",
+          br(),
+          # player1
+          selectInput("club1",
+                      "Club",
+                      choices = Clubs,
+                      selected = Clubs[1]),
+          
+          selectInput(
+            "position1",
+            "Position",
+            choices = Positions,
+            selected = Positions[1]
+          ),
+          
+          selectInput("player1",
+                      "Name",
+                      choices = NULL),
+          
+        ),
+        
+        tabPanel(
+          "Player 2",
+          br(),
+          # player2
+          selectInput("club2",
+                      "Club",
+                      choices = Clubs,
+                      selected = Clubs[1]),
+          
+          selectInput("position2",
+                      "Position",
+                      choices = NULL),
+          
+          
+          selectInput("player2",
+                      "Name",
+                      choices = NULL),
+          
+        )
+        
+      )),
       
-      selectInput("player1",
-                  "Name",
-                  choices = NULL),
-      
+      mainPanel(plotOutput("radar")),)
     ),
     
-    tabPanel(
-      "Player 2",
-      br(),
-      # player2
-      selectInput("club2",
-                  "Club",
-                  choices = Clubs,
-                  selected = Clubs[1]),
-      
-      selectInput("position2",
-                  "Position",
-                  choices = NULL),
-      
-      
-      selectInput("player2",
-                  "Name",
-                  choices = NULL),
-      
-    )
-    
-  )),
-  
-  mainPanel(plotOutput("radar")),)
-    ),
-  
-  )
-  
-)
+  ))
 
 
 # Server logic ----
 server <- function(input, output, session) {
-
   # tab 1 - scatterplot
   output$scatter <- renderPlot({
-    
     plot_data <- fpl_data %>%
-         filter(Points > 50) %>% 
-         filter(Cost >= input$value_range[1], Cost <= input$value_range[2])
+      filter(Points > 50) %>%
+      filter(Cost >= input$value_range[1], Cost <= input$value_range[2])
     value_position <- input$value_position
-   
+    
     
     ggplot(plot_data, aes(x = Points, y = Cost)) +
-      geom_point(
-        aes(color = Position, shape = Position),
-        size = 1.5, 
-        alpha = 0.8
-      ) +
-      scale_color_manual(
-        values = c("#386cb0", "#fdb462", "#7fc97f", "red")
-      ) +
+      geom_point(aes(color = Position, shape = Position),
+                 size = 1.5,
+                 alpha = 0.8) +
+      scale_color_manual(values = c("#386cb0", "#fdb462", "#7fc97f", "red")) +
       geom_text_repel(
         aes(label = Player),
         family = "Poppins",
         size = 3,
-        min.segment.length = 0, 
-        seed = 42, 
+        min.segment.length = 0,
+        seed = 42,
         box.padding = 0.5,
         max.overlaps = Inf,
         nudge_x = .15,
         nudge_y = .5,
         color = "grey50"
       ) +
-    labs(
-      title = "Points Positiopns",
-      subtitle = "later",
-      x = "total_points",
-      y = "cost(m)"
-    ) +  
+      labs(
+        title = "Points Positiopns",
+        subtitle = "later",
+        x = "total_points",
+        y = "cost(m)"
+      ) +
       theme(
         # The default font when not explicitly specified
-        text = element_text(family = "Lobster Two", size = 8, color = "black"),
+        text = element_text(
+          family = "Lobster Two",
+          size = 8,
+          color = "black"
+        ),
         
         # Customize legend text, position, and background.
         legend.text = element_text(size = 9, family = "Roboto"),
@@ -239,15 +251,15 @@ server <- function(input, output, session) {
         
         # Customize title and subtitle font/size/color
         plot.title = element_text(
-          family = "Lobster Two", 
+          family = "Lobster Two",
           size = 20,
-          face = "bold", 
+          face = "bold",
           color = "#2a475e"
         ),
         plot.subtitle = element_text(
-          family = "Lobster Two", 
-          size = 15, 
-          face = "bold", 
+          family = "Lobster Two",
+          size = 15,
+          face = "bold",
           color = "#1b2838"
         ),
         plot.title.position = "plot",
@@ -262,17 +274,38 @@ server <- function(input, output, session) {
         # Only keep y-axis major grid lines, with a grey color and dashed type.
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(color = "#b4aea9", linetype ="dashed"),
+        panel.grid.major.y = element_line(color = "#b4aea9", linetype =
+                                            "dashed"),
         
         # Use a light color for the background of the plot and the panel.
         panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
         plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
       )
-    
-    
-    
   })
   
+  # tab 1 - 
+  output$aaa <- renderPlot({
+    
+    #Create Data
+    x1 = rnorm(100)
+    x2 = rnorm(100)+rep(2,100)
+    par(mfrow=c(2,1))
+    
+    #Make the plot
+    par(mar=c(0,5,3,3))
+    hist(x1 , main="" , xlim=c(-2,5), ylab="Frequency for x1", xlab="", ylim=c(0,25) , xaxt="n", las=1 , col="slateblue1", breaks=10)
+    par(mar=c(5,5,0,3))
+    hist(x2 , main="" , xlim=c(-2,5), ylab="Frequency for x2", xlab="Value of my variable", ylim=c(25,0) , las=1 , col="tomato3"  , breaks=10)
+    
+    
+    plot_data <- fpl_data %>%
+      filter(Points > 50) %>%
+      filter(Cost >= input$value_range[1], Cost <= input$value_range[2])
+    value_position <- input$value_position
+    
+   
+  })
+ 
   
   # tab 2 - radar
   # player 1 filter

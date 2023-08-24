@@ -58,7 +58,7 @@ fpl_raw_data <- read.csv(path)
 
 #### overview the data
 
-```{r, results='hide'}
+```{r glimpse, results='hide'}
 glimpse(fpl_raw_data)
 ```
 
@@ -86,11 +86,11 @@ Rank the players based on their total_point, adding a new column named "Rank" be
 ```{r transform, echo=TRUE}
 # get level function
 get_cost_level <- function(cost_bin) {
-  levels <- levels(fpl_data$Cost_bin)
+  level <- levels(cut_interval((fpl_raw_data$now_cost)/10, 3))
   case_when(
-    cost_bin == levels[1] ~ "Low",
-    cost_bin == levels[2] ~ "Mid",
-    cost_bin == levels[3] ~ "Premium",
+    cost_bin == level[1] ~ "Low",
+    cost_bin == level[2] ~ "Middle",
+    cost_bin == level[3] ~ "Premium",
     .default = NA
   )
 }
@@ -150,13 +150,13 @@ fpl_data <- fpl_raw_data[c(
   mutate(Cost = Cost / 10) %>%
   
   # separate the player into three group by their values
-  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
+  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>% 
   
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin)
 
 # remove data: fpl_raw_data to save memory
-# rm(fpl_raw_data)
+  rm(fpl_raw_data)
 
 # show the table(first six rows)
 knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
@@ -165,8 +165,9 @@ knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
 ```{r constants, include=FALSE}
 Positions <-  c("FWD", "MID", "DEF", "GKP")
 Positions_All <-  c("ALL", Positions)
-Clubs <- c(unique(fpl_data$Club))
-Costs <- c(seq(from = 4, to = 13.5, by = 0.5))
+Levels <- unique(fpl_data$Level)
+Clubs <- unique(fpl_data$Club)
+Costs <- seq(from = 4, to = 13.5, by = 0.5)
 ```
 
 # visualize
@@ -219,41 +220,141 @@ fpl_data %>%
 
 # points and positons
 
-```{r doughut}
-# the beauty of %>%
-aggregate(fpl_data$Points,
-          by = list(Position = fpl_data$Position),
-          FUN = sum) %>%
-  mutate(
-    percentage = x / sum(x),
-    ymax = cumsum(percentage),
-    ymin = c(0, head(ymax, n = -1)),
-    labelPosition = (ymax + ymin) / 2,
-    label = paste(
-      Position,
-      "\n",
-      round(percentage, 2) * 100,
-      "%",
-      sep = ""
-    )
-  ) %>%
-  ggplot(aes(
-    ymax = ymax,
-    ymin = ymin,
-    xmax = 4,
-    xmin = 3,
-    fill = Position
-  )) +
-  geom_rect() +
-  coord_polar(theta = "y") +
-  geom_label(x = 3.5,
-             aes(y = labelPosition, label = label),
-             size = 5) +
-  scale_fill_brewer(palette = 4) +
-  scale_color_brewer(palette = 3) +
-  xlim(c(2, 4)) +
-  theme_void() +
-  theme(legend.position = "none")
+```{r shiny_multiple_distribution_plot}
+ui <- fluidPage(sidebarLayout(
+  sidebarPanel(
+    selectInput(
+      "type",
+      "Chart Type",
+      choices = list(
+        "boxplot" = 1,
+        "violin" = 2,
+        "donut" = 3
+      ),
+      selected = 1
+    ),
+    
+    checkboxGroupInput(
+      "positions",
+      "Position",
+      choices = list(
+        "FWD" = "FWD",
+        "MID" = "MID",
+        "DEF" = "DEF",
+        "GKP" = "GKP"
+      ),
+      selected = Positions
+    ),
+    
+    checkboxGroupInput(
+      "levels",
+      "Levels",
+      choices = list(
+        "Premium" = "Premium",
+        "Middle" = "Middle",
+        "Low" = "Low"
+      ),
+      selected = Levels
+    ),
+    
+  ),
+  
+  mainPanel(plotOutput("plot"),
+            tableOutput("table"))
+  
+))
+
+
+
+server <- function(input, output) {
+  output$plot <- renderPlot({
+    # all selected position
+    positions <- input$positions
+    # all selected levels
+    levels <- input$levels
+    # filter
+    plot_data <-
+      fpl_data %>% filter(Position %in% positions, Level %in% levels)
+    # type
+    if (nrow(plot_data) == 0) {
+      return (NULL)
+    }
+    plot_type = input$type
+    if (plot_type == 1) {
+      blox(plot_data)
+    } else if (plot_type == 2) {
+      violin(plot_data)
+    } else if (plot_type == 3) {
+      donut(plot_data)
+    }
+  })
+  
+  
+  # plot_functions
+  blox <- function(plot_data) {
+    plot_data %>%
+      ggplot(aes(x = Level, y = Points, fill = Position)) +
+      geom_boxplot() +
+      scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+      geom_jitter(color = "black",
+                  size = 0.4,
+                  alpha = 0.9) +
+      xlab("") +
+      theme_ipsum()
+    
+  }
+  
+  violin <- function(plot_data) {
+    plot_data %>%
+      ggplot(aes(x = Level, y = Points, fill = Position)) +
+      geom_violin(alpha = .6) +
+      xlab("") +
+      theme_ipsum()
+  }
+  
+  donut <- function(plot_data) {
+    # the beauty of pipeine %>%
+    aggregate(plot_data$Points,
+              by = list(Position = plot_data$Position),
+              FUN = sum) %>%
+      mutate(
+        percentage = x / sum(x),
+        ymax = cumsum(percentage),
+        ymin = c(0, head(ymax, n = -1)),
+        labelPosition = (ymax + ymin) / 2,
+        label = paste(Position,
+                      "\n",
+                      round(percentage, 2) * 100,
+                      "%",
+                      sep = "")
+      ) %>%
+      ggplot(aes(
+        ymax = ymax,
+        ymin = ymin,
+        xmax = 4,
+        xmin = 3,
+        fill = Position
+      )) +
+      geom_rect() +
+      coord_polar(theta = "y") +
+      geom_label(x = 3.5,
+                 aes(y = labelPosition, label = label),
+                 size = 5) +
+      scale_fill_brewer(palette = 4) +
+      scale_color_brewer(palette = 3) +
+      xlim(c(2, 4)) +
+      theme_void() +
+      theme(legend.position = "none")
+  }
+  
+  #TODO table here
+  output$table <- renderTable({
+    
+  })
+  
+}
+
+shinyApp(ui, server)
 ```
 
 # values and points
@@ -270,7 +371,7 @@ ui <- fluidPage(sidebarLayout(sidebarPanel(
 ),
 mainPanel(plotOutput("scatter"))))
 
-server <- function(input, output, session) {
+server <- function(input, output) {
   output$scatter <- renderPlot({
     plot_data <- fpl_data %>%
       filter(Points > 50) %>%
@@ -355,37 +456,17 @@ shinyApp(ui, server)
 ```
 
 
-```{r boxplot}
-fpl_data %>% 
-  ggplot(aes(x = Level, y = Pointsis))+
-  geom_boxplot()
-```
-
-
 # high value(premium) players have a higher conver rate, are closer to the expected values
 
 # data_transform, divide players by group, step = 1
 column: player, cost, points, avg_points, avg_goals, avg_xG, avg_assists, avg_xA, avg_GC, avg_xGc
+
 ```{r value_points, results='hide'}
 
 ```
 
 
-
-```{r mirror_histogram}
-
-x1 = rnorm(100)
-x2 = rnorm(100)+rep(2,100)
-par(mfrow=c(2,1))
-
-par(mar=c(0,5,3,3))
-hist(x1 , main="" , xlim=c(-2,5), ylab="Frequency for x1", xlab="", ylim=c(0,25) , xaxt="n", las=1 , col="slateblue1", breaks=10)
-par(mar=c(5,5,0,3))
-hist(x2 , main="" , xlim=c(-2,5), ylab="Frequency for x2", xlab="Value of my variable", ylim=c(25,0) , las=1 , col="tomato3"  , breaks=10)
-
-```
-
-```{r radar}
+```{r shiny_radar}
 # different position compare different data in radar chart
 get_radarCols <- function(Position) {
   if (Position == 'FWD' | Position == 'MID') {
@@ -424,57 +505,63 @@ get_radarCols <- function(Position) {
   }
 }
 
-ui <- fluidPage(sidebarLayout(sidebarPanel(tabsetPanel(
-  tabPanel(
-    "Player 1",
-    br(),
-    # player1
-    selectInput("club1",
-                "Club",
-                choices = Clubs,
-                selected = Clubs[1]),
-    
-    selectInput(
-      "position1",
-      "Position",
-      choices = Positions,
-      selected = Positions[1]
+
+ui <- fluidPage(sidebarLayout(
+  sidebarPanel(tabsetPanel(
+    tabPanel(
+      "Player 1",
+      br(),
+      # player1
+      selectInput("club1",
+                  "Club",
+                  choices = Clubs,
+                  selected = Clubs[1]),
+      
+      selectInput(
+        "position1",
+        "Position",
+        choices = Positions,
+        selected = Positions[1]
+      ),
+      
+      selectInput("player1",
+                  "Name",
+                  choices = NULL),
+      
+      textInput("value1",
+                "Value",
+                value = NULL)
+      
     ),
     
-    selectInput("player1",
-                "Name",
-                choices = NULL),
-    
-    textInput("value1",
-              "Value",
-              value = NULL)
-    
-  ),
-  
-  tabPanel(
-    "Player 2",
-    br(),
-    # player2
-    selectInput("club2",
-                "Club",
-                choices = Clubs,
-                selected = Clubs[1]),
-    
-    selectInput("position2",
-                "Position",
-                choices = NULL),
-    
-    
-    selectInput("player2",
-                "Name",
-                choices = NULL),
-    
-    textInput("value2",
-              "Value",
-              value = NULL),
-  )
-)),
-mainPanel(plotOutput("radar")),))
+    tabPanel(
+      "Player 2",
+      br(),
+      # player2
+      selectInput("club2",
+                  "Club",
+                  choices = Clubs,
+                  selected = Clubs[1]),
+      
+      selectInput("position2",
+                  "Position",
+                  choices = NULL),
+      
+      
+      selectInput("player2",
+                  "Name",
+                  choices = NULL),
+      
+      textInput("value2",
+                "Value",
+                value = NULL),
+    )
+  )),
+  mainPanel(plotOutput("radar")),
+  tableOutput("table")
+))
+
+
 server <- function(input, output, session) {
   # player 1 filter
   player1_filter <- reactive({
@@ -600,7 +687,14 @@ server <- function(input, output, session) {
       pt.cex = 3
     )
   })
+  
+  #TODO table here
+  output$table <- renderTable({
+    
+  })
+  
 }
+
 
 shinyApp(ui, server)
 ```
@@ -609,23 +703,40 @@ shinyApp(ui, server)
 # will club make a high xG coverted rate player to be a pk taker?
 
 ```{r xG, results='hide'}
-# fpl_data %>% mutate(Cost_bin = cut_interval(fpl_data$Cost, 3)) %>% View()
+# fpl_data_diff <-
+fpl_data <- fpl_data %>%
+  mutate(xG_diff = Goals - xG, .after = xG) %>%
+  mutate(xA_diff = Assists - xA, .after = xA) %>%
+  mutate(xGc_diff = GC - xGc, .after = xGc) %>%
+  mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
+  mutate(xG90_diff = Goals90 - xG90, .after = xG90) %>%
+  mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
+  mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
+  mutate(GC90 = GC / (Minutes / 90), .before = xGc90) %>%
+  mutate(xGc90_diff = GC90 - xGc90, .after = xGc90)
+# if actual value and expected value are all 0, then the actual value 90 and expected value 90 will be NaN
+# data cleaning here, make NaN become NA
 
 
-
-
-
-# add a column, shows the xG diff with goals
-# fpl_data %>% 
-#  mutate(xG_diff = Goals - xG, .after = xG)
-
-
+# new data table
+knitr::kable(fpl_data[1:5, ], caption = "first 5 rows of fpl_data after adding diff and avg_90 data")
 ```
 
-```{r xG_table, echo=FALSE}
-# table
-knitr::kable(fpl_data[1:5, ])
+```{r multi group line}
+tmp_data <- data.frame(
+  var1 = fpl_data$Goals,
+  var2 = fpl_data$xG
+)
+
+p <- ggplot(tmp_data, aes(x = x)) +
+  geom_histogram(aes(x = var1, y = ..density..), fill = "#69b3a2") +
+  geom_histogram(aes(x = var2, y = -..density..), fill = "#404080") +
+  theme_ipsum() +
+  xlab("value of x")
+
+p
 ```
+
 
 
 
