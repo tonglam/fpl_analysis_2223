@@ -41,12 +41,12 @@ This project is for exploring the data of 2011-12 season FPL data, find out the 
 
 ```{r load library, message=FALSE}
 library(shiny)
-library(shinyjs)
 library(tidyverse)
 library(hrbrthemes)
 library(viridis)
 library(fmsb)
 library(ggrepel)
+library(gridExtra)
 ```
 
 #### load data.csv
@@ -313,7 +313,7 @@ server <- function(input, output) {
   }
   
   donut <- function(plot_data) {
-    # the beauty of pipeine %>%
+    # the beauty of pipeline %>%
     aggregate(plot_data$Points,
               by = list(Position = plot_data$Position),
               FUN = sum) %>%
@@ -459,13 +459,6 @@ shinyApp(ui, server)
 # high value(premium) players have a higher conver rate, are closer to the expected values
 
 # data_transform, divide players by group, step = 1
-column: player, cost, points, avg_points, avg_goals, avg_xG, avg_assists, avg_xA, avg_GC, avg_xGc
-
-```{r value_points, results='hide'}
-
-```
-
-
 ```{r shiny_radar}
 # different position compare different data in radar chart
 get_radarCols <- function(Position) {
@@ -557,8 +550,7 @@ ui <- fluidPage(sidebarLayout(
                 value = NULL),
     )
   )),
-  mainPanel(plotOutput("radar")),
-  tableOutput("table")
+  mainPanel(plotOutput("radar"), tableOutput("table"))
 ))
 
 
@@ -702,8 +694,8 @@ shinyApp(ui, server)
 
 # will club make a high xG coverted rate player to be a pk taker?
 
-```{r xG, results='hide'}
-# fpl_data_diff <-
+```{r expected value diff, results='hide'}
+# fpl_data_diff
 fpl_data <- fpl_data %>%
   mutate(xG_diff = Goals - xG, .after = xG) %>%
   mutate(xA_diff = Assists - xA, .after = xA) %>%
@@ -714,32 +706,136 @@ fpl_data <- fpl_data %>%
   mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
   mutate(GC90 = GC / (Minutes / 90), .before = xGc90) %>%
   mutate(xGc90_diff = GC90 - xGc90, .after = xGc90)
-# if actual value and expected value are all 0, then the actual value 90 and expected value 90 will be NaN
-# data cleaning here, make NaN become NA
-
 
 # new data table
 knitr::kable(fpl_data[1:5, ], caption = "first 5 rows of fpl_data after adding diff and avg_90 data")
 ```
 
-```{r multi group line}
-var <- fpl_data %>% filter(Goals > 5) %>% select(c("Cost", "Goals90","xG90"))
-
-tmp_data <- data.frame(
-  type = c("Goals90", "xG90"),
-  value = c(var$Goals90, var$xG90)
-)
-
-p <- tmp_data %>%
-  ggplot(aes(x=value, fill=type)) +
-    geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity') +
-    scale_fill_manual(values=c("#69b3a2", "#404080")) +
-    theme_ipsum() +
-    labs(fill="")
-
-p
+```{r expeceted value cleaning}
+# count misssing values
+missing_values <- apply(is.na(fpl_data), 2, sum)
+na_values <- which(missing_values > 0)
+# if actual value and expected value are all 0, then the actual value 90 and expected value 90 will be NaN
+# if min > 0, give it an average value, others it is 0
+#  expected90 values nan means the player did not play a single minute, make it NA
+  fpl_data$Goals90 <- ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
+  fpl_data$Assists90 <- ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
+  fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
+  fpl_data$xG90_diff <- fpl_data$Goals90 - fpl_data$xG90
+  fpl_data$xA90_diff <- fpl_data$Assists90 - fpl_data$xA90
+  fpl_data$xGc90_diff <- fpl_data$GC90 - fpl_data$xGc90
+# look at the missing values again, it is clean
+missing_values <- apply(is.na(fpl_data), 2, sum)
 ```
 
+
+```{r shiny_gridExtra}
+# select choices
+goals_max <- max(fpl_data$Goals)
+assists_max <- max(fpl_data$Assists)
+gc_max <- max(fpl_data$GC)
+
+
+ui <- fluidPage(sidebarLayout(
+  sidebarPanel(
+    checkboxGroupInput(
+      "positions",
+      "Position",
+      choices = list(
+        "FWD" = "FWD",
+        "MID" = "MID",
+        "DEF" = "DEF",
+        "GKP" = "GKP"
+      ),
+      selected = Positions
+    ),
+    
+    sliderInput(
+      "goals",
+      "Goals From",
+      min = 1,
+      max = goals_max,
+      value = c(25, goals_max),
+      step = 1
+    ),
+    
+    sliderInput(
+      "assists",
+      "Assists From",
+      min = 1,
+      max = assists_max,
+      value = c(5, assists_max),
+      step = 1
+    ),
+    
+    sliderInput(
+      "gc",
+      "Goals Concede From",
+      min = 1,
+      max = gc_max,
+      value = c(gc_max, 5),
+      step = 5
+    ),
+    
+  ),
+  
+  mainPanel(plotOutput("plot"))
+  
+))
+
+server <- function(input, output) {
+  plot_data <-
+    
+    output$plot <- renderPlot({
+    
+      # p1: Goals and xG
+      goals_data <- fpl_data %>% 
+        filter(Goals >= input$goals[1], Goals <= input$goals[2]) %>% 
+        select(c("Cost", "Goals90", "xG90"))
+      
+      print(goals_data)
+      
+      # create a new data frame for plot[Cost, Value, Type]
+      # need to reshape data here, make a n*3 data frame to 2n*2
+      plot_goals_data <- pivot_longer (goals_data, 
+                                 direction = "long",
+                                 varying = list(c("Goals90", "xG90")),
+                                 v.names = ,
+                                 timevar = ,
+                                 times = c("Goals90", "xG90"))
+      
+      View(plot_goals_data)
+      
+    #  p1 %>%
+    # ggplot( aes(x=year, y=n, group=name, color=name)) +
+    # geom_line() +
+    # scale_color_viridis(discrete = TRUE) +
+    # ggtitle("Popularity of American names in the previous 30 years") +
+    # theme_ipsum() +
+    # ylab("Number of babies born")
+    #     
+    #     
+        
+        
+      #   plot_goals_data %>%
+      #   ggplot(aes(x = value, fill = type)) +
+      #   geom_histogram(color = "#e9ecef",
+      #                  alpha = 0.6,
+      #                  position = 'identity') +
+      #   scale_fill_manual(values = c("#69b3a2", "#404080")) +
+      #   theme_ipsum() +
+      #   labs(fill = "")
+      # 
+      # 
+      # p1
+      
+    })
+  
+  
+}
+
+shinyApp(ui, server)
+```
 
 
 
