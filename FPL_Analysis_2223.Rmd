@@ -735,19 +735,50 @@ goals_max <- max(fpl_data$Goals)
 assists_max <- max(fpl_data$Assists)
 gc_max <- max(fpl_data$GC)
 
+# stats type
+stats_points <- c("Points")
+stats_goals <- c("Goals90", "xG90", "xG90_diff")
+stats_assists <- c("Assists90", "xA90", "xA90_diff")
+stats_gc <- c("GC90", "xGc90", "xGc90_diff")
+stats_cs <- c("CC90")
+all_stats <-
+  c(stats_points, stats_goals, stats_assists, stats_gc, stats_cs)
+
+# create a new data frame for plot[Cost, Value, Type], which is not a tidy data
+# reshape data here, make a n*3 data frame to 2n*2, wide to long
+performance_data <- fpl_data %>%
+  select(
+    c(
+      "Position",
+      "Cost",
+      "Points90",
+      "CS90",
+      "Goals90",
+      "xG90",
+      "xG90_diff",
+      "Assists90",
+      "xA90",
+      "xA90_diff",
+      "GC90",
+      "xGc90",
+      "xGc90_diff"
+    )
+  ) %>%
+  pivot_longer (3:4, names_to = "Type", values_to = "Value")
 
 ui <- fluidPage(sidebarLayout(
   sidebarPanel(
     checkboxGroupInput(
-      "positions",
-      "Position",
+      "types",
+      "Show Stat",
       choices = list(
-        "FWD" = "FWD",
-        "MID" = "MID",
-        "DEF" = "DEF",
-        "GKP" = "GKP"
+        "Points" = "Points",
+        "Goals" = "Goals",
+        "Assists" = "Assists",
+        "Goals Concede" = "GC",
+        "Clean Sheets" = "CS"
       ),
-      selected = Positions
+      selected = c("Points", "Goals")
     ),
     
     sliderInput(
@@ -784,52 +815,127 @@ ui <- fluidPage(sidebarLayout(
 ))
 
 server <- function(input, output) {
-  plot_data <-
+  # define a function to get show stats
+  get_stats_by_type <- function(type) {
+    case_when(
+      type == "Points" ~ stats_points,
+      type == "Goals" ~ stats_goals,
+      type == "Assists" ~ stats_assists,
+      type == "GC" ~ stats_gc,
+      type == "CS" ~ stats_gc
+    )
+  }
+  
+  output$plot <- renderPlot({
+    # all show types
+    types <- input$types
+    # get all the show stats name
+    show_stats <- ""
+    if (is.null(types)) {
+      show_stats <- c(stats_points, stats_goals)
+    } else{
+      for (type in strsplit(types, ", ")) {
+        show_stats <- unique(c(show_stats, get_stats_by_type(type)))
+      }
+    }
     
-    output$plot <- renderPlot({
+    # plot
+    plot_list = list()
+     print(length(plot_list))
+    if (grep("Points", types)) {
+      print("Points")
+      p <- points_plot()
+      print(length(plot_list))
+      plot_list <- c(plot_list, p)
+      print(length(plot_list))
+    }
+    # if (grep("Goals", types)) {
+    #   print("Goals")
+    #   plot_list <- append(plot_list, goals_plot())
+    # }
+    # if (grep("Assists", types)) {
+    #   print("Assists")
+    #   plot_list <- append(plot_list, assists_plot())
+    # }
+    # if (grep("GC", types)) {
+    #   print("GC")
+    #   plot_list <- append(plot_list, gc_plot())
+    # }
+    # if (grep("CS", types)) {
+    #   print("CS")
+    #   plot_list <- append(plot_list, cs_plot())
+    # }
     
-      # p1: Goals and xG
-      goals_data <- fpl_data %>% 
-        filter(Goals >= input$goals[1], Goals <= input$goals[2]) %>% 
-        select(c("Cost", "Goals90", "xG90"))
-      
-      print(goals_data)
-      
-      # create a new data frame for plot[Cost, Value, Type]
-      # need to reshape data here, make a n*3 data frame to 2n*2
-      plot_goals_data <- pivot_longer (goals_data, 
-                                 direction = "long",
-                                 varying = list(c("Goals90", "xG90")),
-                                 v.names = ,
-                                 timevar = ,
-                                 times = c("Goals90", "xG90"))
-      
-      View(plot_goals_data)
-      
-    #  p1 %>%
-    # ggplot( aes(x=year, y=n, group=name, color=name)) +
-    # geom_line() +
-    # scale_color_viridis(discrete = TRUE) +
-    # ggtitle("Popularity of American names in the previous 30 years") +
-    # theme_ipsum() +
-    # ylab("Number of babies born")
-    #     
-    #     
-        
-        
-      #   plot_goals_data %>%
-      #   ggplot(aes(x = value, fill = type)) +
-      #   geom_histogram(color = "#e9ecef",
-      #                  alpha = 0.6,
-      #                  position = 'identity') +
-      #   scale_fill_manual(values = c("#69b3a2", "#404080")) +
-      #   theme_ipsum() +
-      #   labs(fill = "")
-      # 
-      # 
-      # p1
-      
-    })
+    print(length(plot_list))
+
+    # grid
+    if (length(plot_list) > 0) {
+      print("grid")
+      grid.arrange(grobs = plot_list,
+                   nrow = 3,
+                   ncol = 3)
+    }else{
+      print("why zero")
+    }
+    
+  })
+  
+  # plot for points
+  points_plot <- function() {
+    p <- fpl_data %>%
+      select(c("Cost", "Points90")) %>%
+      mutate(Value = Points90, Type = "Points90") %>%
+      plot()
+    return(p)
+  }
+  
+  # plot for goals
+  goals_plot <- function() {
+    fpl_data %>%
+      select(c("Cost", "Goals90", "xG90", "xG90_diff")) %>%
+      pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
+      plot()
+  }
+  
+  # plot for assists
+  assists_plot <- function() {
+    fpl_data %>%
+      select(c("Cost", "Assists90", "xA90", "xA90_diff")) %>%
+      pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
+      plot()
+  }
+  
+  # plot for goals concede
+  gc_plot <- function() {
+    fpl_data %>%
+      select(c("Cost", "GC90", "xGc90", "xGc90_diff")) %>%
+      pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
+      plot()
+  }
+  
+  # plot for clean sheets
+  cs_plot <- function() {
+    fpl_data %>%
+      select(c("Cost", "CS90")) %>%
+      mutate(Value = CS90, Type = "CS90") %>%
+      plot()
+  }
+  
+  # plot line chart
+  plot <- function(data) {
+    data %>%
+      ggplot(aes(
+        x = Cost,
+        y = Value,
+        group = Type,
+        color = Type
+      )) +
+      geom_line() +
+      scale_color_viridis(discrete = TRUE) +
+      ggtitle("Popularity of American names in the previous 30 years") +
+      theme_ipsum() +
+      ylab("Number of babies born")
+  }
   
   
 }
