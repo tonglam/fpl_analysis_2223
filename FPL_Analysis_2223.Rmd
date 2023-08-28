@@ -264,8 +264,6 @@ ui <- fluidPage(sidebarLayout(
   
 ))
 
-
-
 server <- function(input, output) {
   output$plot <- renderPlot({
     # all selected position
@@ -730,13 +728,24 @@ missing_values <- apply(is.na(fpl_data), 2, sum)
 
 
 ```{r shiny_gridExtra}
-# select choices
-goals_max <- max(fpl_data$Goals)
+# type checkbox choices
+type_choices <- max(fpl_data$Goals)
 assists_max <- max(fpl_data$Assists)
 gc_max <- max(fpl_data$GC)
 
 # stats type
+stats_checkbox <- list(
+  "Points" = "Points",
+  "Minutes" = "Minutes",
+  "Goals" = "Goals",
+  "Assists" = "Assists",
+  "Goals Concede" = "GC",
+  "Clean Sheets" = "CS"
+)
+stats_attack <- c("Points", "Minutes", "Goals", "Assists")
+stats_defence <- c("Points", "Minutes", "GC", "CS")
 stats_points <- c("Points")
+stats_minutes <- c("Minutes")
 stats_goals <- c("Goals90", "xG90", "xG90_diff")
 stats_assists <- c("Assists90", "xA90", "xA90_diff")
 stats_gc <- c("GC90", "xGc90", "xGc90_diff")
@@ -746,67 +755,56 @@ all_stats <-
 
 # create a new data frame for plot[Cost, Value, Type], which is not a tidy data
 # reshape data here, make a n*3 data frame to 2n*2, wide to long
-performance_data <- fpl_data %>%
-  select(
-    c(
-      "Position",
-      "Cost",
-      "Points90",
-      "CS90",
-      "Goals90",
-      "xG90",
-      "xG90_diff",
-      "Assists90",
-      "xA90",
-      "xA90_diff",
-      "GC90",
-      "xGc90",
-      "xGc90_diff"
-    )
-  ) %>%
-  pivot_longer (3:4, names_to = "Type", values_to = "Value")
+performance_data <- fpl_data[c(
+  "Position",
+  "Cost",
+  "Level",
+  "Minutes",
+  "Points90",
+  "CS90",
+  "Goals90",
+  "xG90",
+  "xG90_diff",
+  "Assists90",
+  "xA90",
+  "xA90_diff",
+  "GC90",
+  "xGc90",
+  "xGc90_diff"
+)]
+
+# if a player did not finish 90 minutes in total for an entire seson
+# compare their values of per 90 make no sense
+performance_data$Minutes <-
+  ifelse(performance_data$Minutes < 90, NA, performance_data$Minutes)
 
 ui <- fluidPage(sidebarLayout(
   sidebarPanel(
-    checkboxGroupInput(
-      "types",
-      "Show Stat",
-      choices = list(
-        "Points" = "Points",
-        "Goals" = "Goals",
-        "Assists" = "Assists",
-        "Goals Concede" = "GC",
-        "Clean Sheets" = "CS"
-      ),
-      selected = c("Points", "Goals")
+    selectInput(
+      "position",
+      "Position",
+      choices = Positions,
+      selected = Positions[1]
     ),
     
-    sliderInput(
-      "goals",
-      "Goals From",
-      min = 1,
-      max = goals_max,
-      value = c(25, goals_max),
-      step = 1
-    ),
+    selectInput("level",
+                "Level",
+                choices = Levels,
+                selected = Levels[3]),
     
     sliderInput(
-      "assists",
-      "Assists From",
-      min = 1,
-      max = assists_max,
-      value = c(5, assists_max),
-      step = 1
+      "value_range",
+      "Value Range",
+      min = 3.5,
+      max = 13.5,
+      value = c(9.97, 13.1),
+      step = 0.1
     ),
     
-    sliderInput(
-      "gc",
-      "Goals Concede From",
-      min = 1,
-      max = gc_max,
-      value = c(gc_max, 5),
-      step = 5
-    ),
+    checkboxGroupInput("types",
+                       "Show Stat",
+                       choices = stats_checkbox,
+                       selected = stats_attack),
     
   ),
   
@@ -819,12 +817,36 @@ server <- function(input, output) {
   get_stats_by_type <- function(type) {
     case_when(
       type == "Points" ~ stats_points,
+      type == "Minutes" ~ stats_minutes,
       type == "Goals" ~ stats_goals,
       type == "Assists" ~ stats_assists,
       type == "GC" ~ stats_gc,
       type == "CS" ~ stats_gc
     )
   }
+  
+  # change the checkbox default depends on position
+  observeEvent(input$position, {
+    new_position <- input$position
+    if (new_position == Positions[1] |
+        new_position == Positions[2]) {
+      updateCheckboxGroupInput(inputId = "types", selected = stats_attack)
+    } else{
+      updateCheckboxGroupInput(inputId = "types", selected = stats_defence)
+    }
+  })
+  
+  # change the value slider depends on level
+  observeEvent(input$level, {
+    new_level <- input$level
+    if (new_level == Levels[1]) {
+      updateSliderInput(inputId = "value_range", value = c(3.7, 6.83))
+    } else if (new_level == Levels[2]) {
+      updateSliderInput(inputId = "value_range", value = c(6.83, 9.97))
+    } else {
+      updateSliderInput(inputId = "value_range", value = c(9.97, 13.1))
+    }
+  })
   
   output$plot <- renderPlot({
     # all show types
@@ -838,84 +860,103 @@ server <- function(input, output) {
         show_stats <- unique(c(show_stats, get_stats_by_type(type)))
       }
     }
+    # plot_data
+    print(input$position)
+    print(input$level)
+    plot_data <- performance_data %>%
+      filter(
+        Cost > input$value_range[1],
+        Cost <= input$value_range[2],
+        Position == input$position,
+        Level == input$level
+      )
+    
+    
     
     # plot
-    plot_list = list()
-     print(length(plot_list))
-    if (grep("Points", types)) {
-      print("Points")
-      p <- points_plot()
-      print(length(plot_list))
-      plot_list <- c(plot_list, p)
-      print(length(plot_list))
-    }
-    # if (grep("Goals", types)) {
-    #   print("Goals")
-    #   plot_list <- append(plot_list, goals_plot())
-    # }
-    # if (grep("Assists", types)) {
-    #   print("Assists")
-    #   plot_list <- append(plot_list, assists_plot())
-    # }
-    # if (grep("GC", types)) {
-    #   print("GC")
-    #   plot_list <- append(plot_list, gc_plot())
-    # }
-    # if (grep("CS", types)) {
-    #   print("CS")
-    #   plot_list <- append(plot_list, cs_plot())
-    # }
+    p1 = NA
+    p2 = NA
+    p3 = NA
+    p4 = NA
+    p5 = NA
+    p6 = NA
     
-    print(length(plot_list))
-
+    if (nrow(plot_data) > 0) {
+      if (!is.null(types)) {
+        if ("Points" %in% types) {
+          p1 <- points_plot(plot_data)
+        }
+        if ("Minutes" %in% types) {
+          p2 <- minutes_plot(plot_data)
+        }
+        if ("Goals" %in% types) {
+          p3 <- goals_plot(plot_data)
+        }
+        if ("Assists" %in% types) {
+          p4 <- assists_plot(plot_data)
+        }
+        if ("GC" %in% types) {
+          p5 <- gc_plot(plot_data)
+        }
+        if ("CS" %in% types) {
+          p6 <- cs_plot(plot_data)
+        }
+      }
+    }
+    
     # grid
+    plot_list <- list(p1, p2, p3, p4, p5, p6)
+    # remove NA
+    plot_list <-  plot_list[!is.na(plot_list)]
     if (length(plot_list) > 0) {
-      print("grid")
-      grid.arrange(grobs = plot_list,
-                   nrow = 3,
-                   ncol = 3)
-    }else{
-      print("why zero")
+      grid.arrange(grobs = plot_list, ncol = 2)
     }
     
   })
   
   # plot for points
-  points_plot <- function() {
-    p <- fpl_data %>%
+  points_plot <- function(plot_data) {
+    plot_data %>%
       select(c("Cost", "Points90")) %>%
       mutate(Value = Points90, Type = "Points90") %>%
       plot()
-    return(p)
+  }
+  
+  # plot for minutes
+  minutes_plot <- function(plot_data) {
+    plot_data %>%
+      select(c("Cost", "Minutes")) %>%
+      mutate(Value = Minutes, Type = "Minutes") %>%
+      plot()
   }
   
   # plot for goals
-  goals_plot <- function() {
-    fpl_data %>%
+  goals_plot <- function(plot_data) {
+    plot_data %>%
       select(c("Cost", "Goals90", "xG90", "xG90_diff")) %>%
       pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
       plot()
   }
   
   # plot for assists
-  assists_plot <- function() {
-    fpl_data %>%
+  assists_plot <- function(plot_data) {
+    plot_data %>%
       select(c("Cost", "Assists90", "xA90", "xA90_diff")) %>%
       pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
       plot()
   }
   
   # plot for goals concede
-  gc_plot <- function() {
-    fpl_data %>%
+  gc_plot <- function(plot_data) {
+    plot_data %>%
       select(c("Cost", "GC90", "xGc90", "xGc90_diff")) %>%
       pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
       plot()
   }
   
   # plot for clean sheets
-  cs_plot <- function() {
-    fpl_data %>%
+  cs_plot <- function(plot_data) {
+    plot_data %>%
       select(c("Cost", "CS90")) %>%
       mutate(Value = CS90, Type = "CS90") %>%
       plot()
@@ -932,9 +973,10 @@ server <- function(input, output) {
       )) +
       geom_line() +
       scale_color_viridis(discrete = TRUE) +
-      ggtitle("Popularity of American names in the previous 30 years") +
-      theme_ipsum() +
-      ylab("Number of babies born")
+      #  theme_ipsum() +
+      xlab("Cost(m)") +
+      ylab("") +
+      theme(legend.title = element_blank())
   }
   
   
@@ -943,5 +985,15 @@ server <- function(input, output) {
 shinyApp(ui, server)
 ```
 
+# Conclusion
+
+
+```{r heatmap}
+
+
+
+
+
+```
 
 
