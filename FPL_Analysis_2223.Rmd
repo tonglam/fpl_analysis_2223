@@ -40,15 +40,16 @@ This project is for exploring the data of 2011-12 season FPL data, find out the 
 ### load library
 
 ```{r library, message=FALSE}
-library(shiny)
 library(tidyverse)
+library(shiny)
+library(htmltools)
+library(fmsb)
 library(RColorBrewer)
 library(hrbrthemes)
 library(viridis)
-library(fmsb)
 library(ggrepel)
+library(grid)
 library(gridExtra)
-library(ggstance)
 ```
 
 #### load data.csv
@@ -166,7 +167,6 @@ knitr::kable(fpl_data[1:5, ], caption =  "first 5 rows of fpl_data")
 
 ```{r transform_2, include=FALSE}
 Positions <-  c("FWD", "MID", "DEF", "GKP")
-Positions_All <-  c("ALL", Positions)
 Levels <- unique(fpl_data$Level)
 Clubs <- unique(fpl_data$Club)
 Costs <- seq(from = 4, to = 13.5, by = 0.5)
@@ -184,7 +184,7 @@ fpl_data %>%
                color = "#e9ecef",
                alpha = 0.6) +
   xlim(0, 300) + 
-  ggtitle("Points distribution of players who played more than 1000 minutes") +
+  ggtitle("Points distribution of players") +
   theme_ipsum() +
   theme(plot.title = element_text(size = 20))
 ```
@@ -197,7 +197,7 @@ fpl_data %>%
   ggplot(aes(x = Points, group = Position, fill = Position)) +
   geom_density(adjust = 1.5, alpha = 0.6) +
   xlim(0, 300) + 
-  ggtitle("Points distribution of players who played more than 1000 minutes") +
+  ggtitle("Points distribution of players") +
   labs(subtitle = "Grouped by Player Position") + 
   theme_ipsum() + 
   theme(plot.title = element_text(size = 20), plot.subtitle = element_text(size = 14))
@@ -232,7 +232,7 @@ fpl_data %>%
 # points and positons
 
 ```{r shiny_multiple_distribution_plot}
-ui <- fluidPage(
+ui <-  fluidPage(
   
   titlePanel("Total points distribution across different levels"),
   
@@ -274,12 +274,12 @@ ui <- fluidPage(
     
   ),
   
-  mainPanel(plotOutput("plot"),
-            tableOutput("table"))
-  
+  mainPanel(plotOutput("plot"))
+
 ))
 
-server <- function(input, output) {
+server <-  function(input, output) {
+  
   output$plot <- renderPlot({
     # all selected position
     positions <- input$positions
@@ -308,7 +308,7 @@ server <- function(input, output) {
     plot_data %>%
       ggplot(aes(x = Level, y = Points, fill = Position)) +
       geom_boxplot() +
-      stat_summary(fun.y = mean, geom = "point", shape = 20, size = 10, color = "#ec7014", fill = "#ec7014") +
+      stat_summary(fun = mean, geom = "point", shape = 20, size = 10, color = "#ec7014", fill = "#ec7014") +
       scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
       geom_jitter(color = "black",
                   size = 0.4,
@@ -361,31 +361,46 @@ server <- function(input, output) {
       theme(legend.position = "none")
   }
   
-  #TODO table here
-  output$table <- renderTable({
-    
-  })
-  
 }
 
-shinyApp(ui, server)
+shinyApp(ui, server, options = list(height = '500', width = '100%'))
 ```
 
 # values and points
 ```{r shiny_scatter}
 ui <- fluidPage(sidebarLayout(sidebarPanel(
-  sliderInput(
-    "value_range",
-    "Value Range",
-    min = 3.5,
-    max = 13.5,
-    value = c(6, 10),
-    step = 0.1
-  )
+  
+  selectInput("level",
+                "Level",
+                choices = Levels,
+                selected = Levels[3]),
+                
+ sliderInput(
+      "value_range",
+      "Value Range",
+      min = 3.5,
+      max = 13.5,
+      value = c(9.97, 13.1),
+      step = 0.1
+    )        
+        
 ),
 mainPanel(plotOutput("scatter"))))
 
 server <- function(input, output) {
+  
+  # change the value slider depends on level
+  observeEvent(input$level, {
+    new_level <- input$level
+    if (new_level == Levels[1]) {
+      updateSliderInput(inputId = "value_range", value = c(3.7, 6.83))
+    } else if (new_level == Levels[2]) {
+      updateSliderInput(inputId = "value_range", value = c(6.83, 9.97))
+    } else {
+      updateSliderInput(inputId = "value_range", value = c(9.97, 13.1))
+    }
+  })
+  
   output$scatter <- renderPlot({
     plot_data <- fpl_data %>%
       filter(Points > 50) %>%
@@ -513,7 +528,24 @@ get_radarCols <- function(Position) {
 }
 
 
-ui <- fluidPage(sidebarLayout(
+ui <- fluidPage(
+  tags$head(
+    tags$style(
+      HTML("
+           .title{
+          text-align: center;
+           font-size: 24px;
+           font-weight: bold;
+           color: #3c8dbc;
+           padding: 20px;
+           }
+           ")
+    )
+  ),
+    
+  div(class = "title", "Compare two different players in the same position"),
+  
+  sidebarLayout(
   sidebarPanel(tabsetPanel(
     tabPanel(
       "Player 1",
@@ -564,8 +596,11 @@ ui <- fluidPage(sidebarLayout(
                 value = NULL),
     )
   )),
-  mainPanel(plotOutput("radar"), tableOutput("table"))
-))
+  mainPanel(plotOutput("radar"), tableOutput("table")))
+  
+  # fluidRow(column(12, tableOutput("table")))
+
+)
 
 
 server <- function(input, output, session) {
@@ -694,24 +729,25 @@ server <- function(input, output, session) {
     )
   })
   
-  #TODO table here
   output$table <- renderTable({
-    
+    radar_data_filter() %>% 
+      mutate(Player = c(input$player1, input$player2), .before = Points)
   })
   
 }
 
 
-shinyApp(ui, server)
+shinyApp(ui, server, options = list(height = '600', width = '100%'))
 ```
 
 
 # will club make a high xG coverted rate player to be a pk taker?
 
 ```{r transform_3, results='hide'}
-# fpl_data_diff
+# fpl_data_diff, the next column is based on the result of the last column
+# use mutate one time for one column here
 fpl_data <- fpl_data %>%
-  mutate(xG_diff = Goals - xG, .after = xG) %>%
+  mutate(xG_diff = Goals - xG, .after = xG,) %>% 
   mutate(xA_diff = Assists - xA, .after = xA) %>%
   mutate(xGc_diff = GC - xGc, .after = xGc) %>%
   mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
@@ -724,12 +760,12 @@ fpl_data <- fpl_data %>%
 # new data table
 knitr::kable(fpl_data[1:5, ], caption = "first 5 rows of fpl_data after adding diff and avg_90 data")
 
-# count misssing values
+# count missing values
 missing_values <- apply(is.na(fpl_data), 2, sum)
 na_values <- which(missing_values > 0)
 # if actual value and expected value are all 0, then the actual value 90 and expected value 90 will be NaN
 # if min > 0, give it an average value, others it is 0
-#  expected90 values nan means the player did not play a single minute, make it NA
+#  expected90 values NaN means the player did not play a single minute, make it NA
   fpl_data$Goals90 <- ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
   fpl_data$Assists90 <- ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
   fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
@@ -739,8 +775,9 @@ na_values <- which(missing_values > 0)
 # look at the missing values again, it is clean
 missing_values <- apply(is.na(fpl_data), 2, sum)
 
-fpl_data <- fpl_data[c(
+performance_data <- fpl_data[c(
   "Player",
+  "Club",
   "Position",
   "Level",
   "Cost",
@@ -765,7 +802,7 @@ Let take a look at the per 90 values.
 ```{r horizontal_violin}
 # create a new data frame for plot[Cost, Value, Type], which is not a tidy data
 # reshape data here, use provide_long() to create a tidy data
-fpl_data[c(
+performance_data[c(
   "Minutes",
   "Points90",
   "CS90",
@@ -789,7 +826,7 @@ Outlier should be players play less than 90, so their per90 values are extremely
 Transfer these data into NA, because when we are trying to analyse the performance of players by using the per90 data, these players who played less than 90 mins make no sense.
 
 ```{r transform_4}
-fpl_data <- fpl_data %>% 
+performance_data <- performance_data %>% 
   mutate_all(~ifelse(Minutes < 90, NA, .)) %>% 
   na.omit()
 ```
@@ -797,9 +834,9 @@ fpl_data <- fpl_data %>%
 
 ```{r shiny_gridExtra}
 # type checkbox choices
-type_choices <- max(fpl_data$Goals)
-assists_max <- max(fpl_data$Assists)
-gc_max <- max(fpl_data$GC)
+type_choices <- max(performance_data$Goals)
+assists_max <- max(performance_data$Assists)
+gc_max <- max(performance_data$GC)
 
 # stats type
 stats_checkbox <- list(
@@ -852,8 +889,9 @@ ui <- fluidPage(sidebarLayout(
   ),
   
   mainPanel(plotOutput("plot"))
-  
-))
+),
+
+fluidRow(column(12, tableOutput("table"))))
 
 server <- function(input, output) {
   # define a function to get show stats
@@ -903,17 +941,15 @@ server <- function(input, output) {
         show_stats <- unique(c(show_stats, get_stats_by_type(type)))
       }
     }
+    show_stats <- show_stats[show_stats != ""]
+    
     # plot_data
-    plot_data <- fpl_data %>%
-      filter(
-        Cost > input$value_range[1],
-        Cost <= input$value_range[2],
-        Position == input$position,
-        Level == input$level
-      )
+    plot_data <- performance_data %>%
+      filter(Cost > input$value_range[1],
+             Cost <= input$value_range[2],
+             Position == input$position)
     
     player_number <- length(plot_data)
-    print(plot_data)
     
     # plot
     p1 = NA
@@ -946,14 +982,19 @@ server <- function(input, output) {
       }
     }
     
-    #TODO add a title, include the player num, textGrob = "Compare players number:";adjust the height
-    
     # grid
     plot_list <- list(p1, p2, p3, p4, p5, p6)
-    # remove NA
+    # remove plot NAs
     plot_list <-  plot_list[!is.na(plot_list)]
     if (length(plot_list) > 0) {
-      grid.arrange(grobs = plot_list, ncol = 2)
+      # add title
+      title <- textGrob("Compare players' actual values and expected values", gp = gpar(fontsize = 15))
+      # arrange
+      grid.arrange(
+        grobs = plot_list,
+        ncol = 2,
+        bottom = title
+      )
     }
     
   })
@@ -1017,15 +1058,37 @@ server <- function(input, output) {
       )) +
       geom_line() +
       scale_color_viridis(discrete = TRUE) +
-      #  theme_ipsum() +
       xlab("Cost(m)") +
       ylab("") +
+      theme_ipsum() + 
       theme(legend.title = element_blank())
   }
   
+  output$table <- renderTable({
+    # all show types
+    types <- input$types
+    # get all the show stats name
+    show_stats <- ""
+    if (is.null(types)) {
+      show_stats <- c(stats_points, stats_goals)
+    } else{
+      for (type in strsplit(types, ", ")) {
+        show_stats <- unique(c(show_stats, get_stats_by_type(type)))
+      }
+    }
+    show_stats <- show_stats[show_stats != ""]
+    performance_data %>%
+      filter(Cost > input$value_range[1],
+             Cost <= input$value_range[2],
+             Position == input$position) %>%
+      arrange(desc(Cost)) %>%
+      select(all_of(c("Player", "Level", "Cost", show_stats)))
+    
+  })
+  
 }
 
-shinyApp(ui, server)
+shinyApp(ui, server, options = list(height = '700', width = '100%'))
 ```
 
 # Conclusion
@@ -1034,7 +1097,7 @@ Let return to the top 50 players, after the discussions above, we can find out t
 
 ```{r heatmap, fig.height = 9}
 # select the top 50 players
-plot_data <- fpl_data %>%
+plot_data <- performance_data %>%
   arrange(-Points) %>%
   head(50) %>%
   mutate(
