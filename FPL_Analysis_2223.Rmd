@@ -48,6 +48,7 @@ library(viridis)
 library(fmsb)
 library(ggrepel)
 library(gridExtra)
+library(ggstance)
 ```
 
 #### load data.csv
@@ -87,7 +88,7 @@ Rank the players based on their total_point, adding a new column named "Rank" be
 ```{r transform_1, echo=TRUE}
 # get level function
 get_cost_level <- function(cost_bin) {
-  level <- levels(cut_interval((fpl_raw_data$now_cost)/10, 3))
+  level <- levels(cut_interval((fpl_raw_data$now_cost) / 10, 3))
   case_when(
     cost_bin == level[1] ~ "Low",
     cost_bin == level[2] ~ "Middle",
@@ -151,16 +152,16 @@ fpl_data <- fpl_raw_data[c(
   mutate(Cost = Cost / 10) %>%
   
   # separate the player into three group by their values
-  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>% 
+  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
   
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin)
 
 # remove data: fpl_raw_data to save memory
-  rm(fpl_raw_data)
+rm(fpl_raw_data)
 
 # show the table(first six rows)
-knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
+knitr::kable(fpl_data[1:5, ], caption =  "first 5 rows of fpl_data")
 ```
 
 ```{r transform_2, include=FALSE}
@@ -177,23 +178,29 @@ Costs <- seq(from = 4, to = 13.5, by = 0.5)
 
 ```{r desity}
 fpl_data %>%
+  filter(Minutes > 1000) %>%
   ggplot(aes(x = Points)) +
   geom_density(fill = "#69b3a2",
                color = "#e9ecef",
-               alpha = 0.8) +
-  ggtitle("Points distribution of players") +
-  ylab("") +
-  theme_ipsum()
+               alpha = 0.6) +
+  xlim(0, 300) + 
+  ggtitle("Points distribution of players who played more than 1000 minutes") +
+  theme_ipsum() +
+  theme(plot.title = element_text(size = 20))
 ```
 
 # multiple desity, group by position
 
 ```{r multiple_desity}
 fpl_data %>%
+  filter(Minutes > 1000) %>%
   ggplot(aes(x = Points, group = Position, fill = Position)) +
-  geom_density(adjust = 1.5, alpha = 0.4) +
-  ylab("") +
-  theme_ipsum()
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  xlim(0, 300) + 
+  ggtitle("Points distribution of players who played more than 1000 minutes") +
+  labs(subtitle = "Grouped by Player Position") + 
+  theme_ipsum() + 
+  theme(plot.title = element_text(size = 20), plot.subtitle = element_text(size = 14))
 ```
 
 # look at the top 30 players
@@ -210,19 +217,26 @@ fpl_data %>%
   geom_label(
     aes(y = Points, label = Points),
     position = position_stack(vjust = 1),
-    size = 3,
+    size = 2,
     show.legend = F
   ) +
+  ylim(0, 300) + 
   coord_flip() +
   scale_color_brewer(palette = 3) +
+  ggtitle("Top 50 Players with the Highest Points") + 
   xlab("") +
+  theme(plot.title = element_text(hjust = .5)) + 
   theme_ipsum()
 ```
 
 # points and positons
 
 ```{r shiny_multiple_distribution_plot}
-ui <- fluidPage(sidebarLayout(
+ui <- fluidPage(
+  
+  titlePanel("Total points distribution across different levels"),
+  
+  sidebarLayout(
   sidebarPanel(
     selectInput(
       "type",
@@ -294,10 +308,12 @@ server <- function(input, output) {
     plot_data %>%
       ggplot(aes(x = Level, y = Points, fill = Position)) +
       geom_boxplot() +
+      stat_summary(fun.y = mean, geom = "point", shape = 20, size = 10, color = "#ec7014", fill = "#ec7014") +
       scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
       geom_jitter(color = "black",
                   size = 0.4,
                   alpha = 0.9) +
+      ylim(0, 300) + 
       xlab("") +
       theme_ipsum()
   }
@@ -746,7 +762,7 @@ fpl_data <- fpl_data[c(
 
 Let take a look at the per 90 values.
 
-```{r horizontal violin}
+```{r horizontal_violin}
 # create a new data frame for plot[Cost, Value, Type], which is not a tidy data
 # reshape data here, use provide_long() to create a tidy data
 fpl_data[c(
@@ -759,14 +775,14 @@ fpl_data[c(
 )] %>%
   pivot_longer (2:6, names_to = "Per90", values_to = "Value") %>%
   ggplot(aes(x = Per90, y = Value, fill = Per90, color = Per90)) +
-  geom_violin(width = 2.1, size = 0.2) +
+  geom_violin(width = 1, size = 0.2) +
   scale_fill_viridis(discrete = T) +
   scale_color_viridis(discrete = T) +
   theme_ipsum() + 
   xlab("") + 
   ylab("Actual Value Per 90") +
   coord_flip() + 
-  geom_jitter()
+  geom_jitter(alpha = .5, size = 1)
 ```
 
 Outlier should be players play less than 90, so their per90 values are extremely high.
@@ -1016,7 +1032,7 @@ shinyApp(ui, server)
 
 Let return to the top 50 players, after the discussions above, we can find out that xxx. Use a heatmap to verify our observation.
 
-```{r heatmap}
+```{r heatmap, fig.height = 9}
 # select the top 50 players
 plot_data <- fpl_data %>%
   arrange(-Points) %>%
