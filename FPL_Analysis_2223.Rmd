@@ -38,7 +38,6 @@ This project is for exploring the data of 2011-12 season FPL data, find out the 
 ## Data loading
 
 ### load library
-
 ```{r library, message=FALSE}
 library(tidyverse)
 library(shiny)
@@ -53,7 +52,6 @@ library(gridExtra)
 ```
 
 #### load data.csv
-
 ```{r data_file, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
@@ -121,7 +119,6 @@ fpl_data <- fpl_raw_data[c(
   "clean_sheets",
   "clean_sheets_per_90"
 )] %>%
-  
   rename(all_of(
     c(
       Player = "web_name",
@@ -145,16 +142,12 @@ fpl_data <- fpl_raw_data[c(
       CS = "clean_sheets",
       CS90 = "clean_sheets_per_90"
     )
-    
   )) %>%
-  
   # cost is 10 times larger because it is easier to store a integer in the database
   # now we can return it to the actual value by diving 10
   mutate(Cost = Cost / 10) %>%
-  
   # separate the player into three group by their values
   mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
-  
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin)
 
@@ -162,7 +155,7 @@ fpl_data <- fpl_raw_data[c(
 rm(fpl_raw_data)
 
 # show the table(first six rows)
-knitr::kable(fpl_data[1:5, ], caption =  "first 5 rows of fpl_data")
+knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
 ```
 
 ```{r transform_2, include=FALSE}
@@ -183,7 +176,7 @@ fpl_data %>%
   geom_density(fill = "#69b3a2",
                color = "#e9ecef",
                alpha = 0.6) +
-  xlim(0, 300) + 
+  xlim(0, 300) +
   ggtitle("Points distribution of players") +
   theme_ipsum() +
   theme(plot.title = element_text(size = 20))
@@ -196,11 +189,12 @@ fpl_data %>%
   filter(Minutes > 1000) %>%
   ggplot(aes(x = Points, group = Position, fill = Position)) +
   geom_density(adjust = 1.5, alpha = 0.6) +
-  xlim(0, 300) + 
+  xlim(0, 300) +
   ggtitle("Points distribution of players") +
-  labs(subtitle = "Grouped by Player Position") + 
-  theme_ipsum() + 
-  theme(plot.title = element_text(size = 20), plot.subtitle = element_text(size = 14))
+  labs(subtitle = "Grouped by Player Position") +
+  theme_ipsum() +
+  theme(plot.title = element_text(size = 20),
+        plot.subtitle = element_text(size = 14))
 ```
 
 # look at the top 30 players
@@ -220,66 +214,78 @@ fpl_data %>%
     size = 2,
     show.legend = F
   ) +
-  ylim(0, 300) + 
+  ylim(0, 300) +
   coord_flip() +
   scale_color_brewer(palette = 3) +
-  ggtitle("Top 50 Players with the Highest Points") + 
+  ggtitle("Top 50 Players with the Highest Points") +
   xlab("") +
-  theme(plot.title = element_text(hjust = .5)) + 
+  theme(plot.title = element_text(hjust = .5)) +
   theme_ipsum()
 ```
 
 # points and positons
 
-```{r shiny_multiple_distribution_plot}
-ui <-  fluidPage(
-  
-  titlePanel("Total points distribution across different levels"),
+```{r shiny_multiple_distribution}
+multiple_distribution_ui <-  fluidPage(
+   tags$head(
+    tags$style(
+      HTML("
+           .title{
+          text-align: center;
+           font-size: 24px;
+           font-weight: bold;
+           color: #3c8dbc;
+           padding: 20px;
+           }
+           ")
+    )
+  ),
+  div(class = "title", "Total points distribution across different levels"),
   
   sidebarLayout(
-  sidebarPanel(
-    selectInput(
-      "type",
-      "Chart Type",
-      choices = list(
-        "boxplot" = 1,
-        "violin" = 2,
-        "donut" = 3
+    sidebarPanel(
+      selectInput(
+        "type",
+        "Chart Type",
+        choices = list(
+          "boxplot" = 1,
+          "violin" = 2,
+          "donut" = 3
+        ),
+        selected = 1
       ),
-      selected = 1
+      
+      checkboxGroupInput(
+        "positions",
+        "Position",
+        choices = list(
+          "FWD" = "FWD",
+          "MID" = "MID",
+          "DEF" = "DEF",
+          "GKP" = "GKP"
+        ),
+        selected = Positions
+      ),
+      
+      checkboxGroupInput(
+        "levels",
+        "Levels",
+        choices = list(
+          "Premium" = "Premium",
+          "Middle" = "Middle",
+          "Low" = "Low"
+        ),
+        selected = Levels
+      ),
+      
     ),
     
-    checkboxGroupInput(
-      "positions",
-      "Position",
-      choices = list(
-        "FWD" = "FWD",
-        "MID" = "MID",
-        "DEF" = "DEF",
-        "GKP" = "GKP"
-      ),
-      selected = Positions
-    ),
+    mainPanel(plotOutput("plot"))
     
-    checkboxGroupInput(
-      "levels",
-      "Levels",
-      choices = list(
-        "Premium" = "Premium",
-        "Middle" = "Middle",
-        "Low" = "Low"
-      ),
-      selected = Levels
-    ),
-    
-  ),
-  
-  mainPanel(plotOutput("plot"))
+  )
+)
 
-))
-
-server <-  function(input, output) {
-  
+multiple_distribution_server <-  function(input, output) {
   output$plot <- renderPlot({
     # all selected position
     positions <- input$positions
@@ -302,18 +308,24 @@ server <-  function(input, output) {
     }
   })
   
-  
   # plot_functions
   blox <- function(plot_data) {
     plot_data %>%
       ggplot(aes(x = Level, y = Points, fill = Position)) +
       geom_boxplot() +
-      stat_summary(fun = mean, geom = "point", shape = 20, size = 10, color = "#ec7014", fill = "#ec7014") +
+      stat_summary(
+        fun = mean,
+        geom = "point",
+        shape = 20,
+        size = 10,
+        color = "#ec7014",
+        fill = "#ec7014"
+      ) +
       scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
       geom_jitter(color = "black",
                   size = 0.4,
                   alpha = 0.9) +
-      ylim(0, 300) + 
+      ylim(0, 300) +
       xlab("Level") +
       theme_ipsum()
   }
@@ -363,32 +375,53 @@ server <-  function(input, output) {
   
 }
 
-shinyApp(ui, server, options = list(height = '500', width = '100%'))
+shinyApp(
+  ui = multiple_distribution_ui,
+  server = multiple_distribution_server,
+  options = list(height = '500', width = '100%')
+)
 ```
 
 # values and points
 ```{r shiny_scatter}
-ui <- fluidPage(sidebarLayout(sidebarPanel(
+scatter_ui <- fluidPage(
+  tags$head(tags$style(
+    HTML(
+      "
+           .title{
+           text-align: center;
+           font-size: 24px;
+           font-weight: bold;
+           color: #3c8dbc;
+           padding: 20px;
+           }
+           "
+    )
+  )),
+  div(class = "title", "Compare Player Points by Level or Value"),
   
-  selectInput("level",
-                "Level",
-                choices = Levels,
-                selected = Levels[2]),
-                
- sliderInput(
-      "value_range",
-      "Value Range",
-      min = 3.7,
-      max = 13.1,
-      value = c(6.83, 9.97),
-      step = 0.1
-    )        
-        
-),
-mainPanel(plotOutput("scatter"))))
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("level",
+                  "Level",
+                  choices = Levels,
+                  selected = Levels[2]),
+      
+      sliderInput(
+        "value_range",
+        "Value Range",
+        min = 3.7,
+        max = 13.1,
+        value = c(6.83, 9.97),
+        step = 0.1
+      )
+      
+    ),
+    mainPanel(plotOutput("scatter"))
+  )
+)
 
-server <- function(input, output) {
-  
+scatter_server <- function(input, output) {
   # change the value slider depends on level
   observeEvent(input$level, {
     new_level <- input$level
@@ -411,7 +444,7 @@ server <- function(input, output) {
                  size = 1.5,
                  alpha = 0.8) +
       scale_color_manual(values = c("#386cb0", "#fdb462", "#7fc97f", "red")) +
-      xlim(0, 300) + 
+      xlim(0, 300) +
       geom_text_repel(
         aes(label = Player),
         family = "Poppins",
@@ -424,11 +457,8 @@ server <- function(input, output) {
         nudge_y = .5,
         color = "grey50"
       ) +
-      labs(
-        title = "Compare Player Points by Level or Value",
-        x = "total points",
-        y = "cost(m)"
-      ) +
+      labs(x = "total points",
+           y = "cost(m)") +
       theme(
         # The default font when not explicitly specified
         text = element_text(
@@ -445,15 +475,6 @@ server <- function(input, output) {
         # This one removes the background behind each key in the legend
         legend.key = element_blank(),
         legend.title = element_blank(),
-        
-        # Customize title and subtitle font/size/color
-        plot.title = element_text(
-          family = "Lobster Two",
-          size = 20,
-          face = "bold",
-          color = "#2a475e"
-        ),
-        plot.title.position = "plot",
         
         # Adjust axis parameters such as size and color.
         axis.text = element_text(size = 10, color = "black"),
@@ -476,7 +497,9 @@ server <- function(input, output) {
   })
 }
 
-shinyApp(ui, server)
+shinyApp(ui = scatter_ui,
+         server = scatter_server,
+         options = list(height = '500', width = '100%'))
 ```
 
 
@@ -522,83 +545,79 @@ get_radarCols <- function(Position) {
   }
 }
 
-
-ui <- fluidPage(
-  tags$head(
-    tags$style(
-      HTML("
+radar_ui <- fluidPage(
+  tags$head(tags$style(
+    HTML(
+      "
            .title{
-          text-align: center;
+           text-align: center;
            font-size: 24px;
            font-weight: bold;
            color: #3c8dbc;
            padding: 20px;
            }
-           ")
+           "
     )
-  ),
-    
+  )),
+  
   div(class = "title", "Compare two different players in the same position"),
   
   sidebarLayout(
-  sidebarPanel(tabsetPanel(
-    tabPanel(
-      "Player 1",
-      br(),
-      # player1
-      selectInput("club1",
-                  "Club",
-                  choices = Clubs,
-                  selected = Clubs[1]),
-      
-      selectInput(
-        "position1",
-        "Position",
-        choices = Positions,
-        selected = Positions[1]
+    sidebarPanel(tabsetPanel(
+      tabPanel(
+        "Player 1",
+        br(),
+        # player1
+        selectInput("club1",
+                    "Club",
+                    choices = Clubs,
+                    selected = Clubs[1]),
+        
+        selectInput(
+          "position1",
+          "Position",
+          choices = Positions,
+          selected = Positions[1]
+        ),
+        
+        selectInput("player1",
+                    "Name",
+                    choices = NULL),
+        
+        textInput("value1",
+                  "Value",
+                  value = NULL)
+        
       ),
       
-      selectInput("player1",
-                  "Name",
-                  choices = NULL),
-      
-      textInput("value1",
-                "Value",
-                value = NULL)
-      
-    ),
-    
-    tabPanel(
-      "Player 2",
-      br(),
-      # player2
-      selectInput("club2",
-                  "Club",
-                  choices = Clubs,
-                  selected = Clubs[1]),
-      
-      selectInput("position2",
-                  "Position",
-                  choices = NULL),
-      
-      
-      selectInput("player2",
-                  "Name",
-                  choices = NULL),
-      
-      textInput("value2",
-                "Value",
-                value = NULL),
-    )
-  )),
-  mainPanel(plotOutput("radar"), tableOutput("table")))
-  
-  # fluidRow(column(12, tableOutput("table")))
-
+      tabPanel(
+        "Player 2",
+        br(),
+        # player2
+        selectInput("club2",
+                    "Club",
+                    choices = Clubs,
+                    selected = Clubs[1]),
+        
+        selectInput("position2",
+                    "Position",
+                    choices = NULL),
+        
+        
+        selectInput("player2",
+                    "Name",
+                    choices = NULL),
+        
+        textInput("value2",
+                  "Value",
+                  value = NULL),
+      )
+    )),
+    mainPanel(plotOutput("radar"), tableOutput("table"))
+  )
 )
 
-
-server <- function(input, output, session) {
+radar_server <- function(input, output, session) {
   # player 1 filter
   player1_filter <- reactive({
     fpl_data %>%
@@ -655,7 +674,7 @@ server <- function(input, output, session) {
   })
   
   # radar data
-  radar_data_filter <- reactive({
+   radar_data_filter <- reactive({
     # organize data
     req(input$player1)
     req(input$player2)
@@ -681,7 +700,7 @@ server <- function(input, output, session) {
       ),
       rep(0, 8),
       plot_data)
-    
+   
     # color vector
     colors_border = c(rgb(0.2, 0.5, 0.5, 0.9),
                       rgb(0.8, 0.2, 0.5, 0.9),
@@ -725,14 +744,18 @@ server <- function(input, output, session) {
   })
   
   output$table <- renderTable({
-    radar_data_filter() %>% 
-      mutate(Player = c(input$player1, input$player2), .before = Points)
+    radar_data_filter() %>%
+      mutate(Player = c(input$player1, input$player2),
+             .before = Points)
   })
   
 }
 
-
-shinyApp(ui, server, options = list(height = '600', width = '100%'))
+shinyApp(
+  ui = radar_ui,
+  server = radar_server,
+  options = list(height = '600', width = '100%')
+)
 ```
 
 
@@ -781,7 +804,6 @@ performance_data <- fpl_data[c(
   "Points",
   "Minutes",
   "Points90",
-  "CS90",
   "Goals90",
   "xG90",
   "xG90_diff",
@@ -790,7 +812,8 @@ performance_data <- fpl_data[c(
   "xA90_diff",
   "GC90",
   "xGc90",
-  "xGc90_diff"
+  "xGc90_diff",
+  "CS90"
 )]
 ```
 
@@ -802,10 +825,10 @@ Let take a look at the per 90 values.
 performance_data[c(
   "Minutes",
   "Points90",
-  "CS90",
   "Goals90",
   "Assists90",
-  "GC90"
+  "GC90",
+  "CS90"
 )] %>%
   pivot_longer (2:6, names_to = "Per90", values_to = "Value") %>%
   ggplot(aes(x = Per90, y = Value, fill = Per90, color = Per90)) +
@@ -813,8 +836,9 @@ performance_data[c(
   scale_fill_viridis(discrete = T) +
   scale_color_viridis(discrete = T) +
   theme_ipsum() + 
+  ggtitle("Distribution of per 90 Values") + 
   xlab("") + 
-  ylab("Actual Value Per 90") +
+  ylab("Actual Value per 90") +
   coord_flip() + 
   geom_jitter(alpha = .5, size = 1)
 ```
@@ -855,42 +879,60 @@ stats_cs <- c("CC90")
 all_stats <-
   c(stats_points, stats_goals, stats_assists, stats_gc, stats_cs)
 
-ui <- fluidPage(sidebarLayout(
-  sidebarPanel(
-    selectInput(
-      "position",
-      "Position",
-      choices = Positions,
-      selected = Positions[1]
+gridExtra_ui <- fluidPage(
+  tags$head(tags$style(
+    HTML(
+      "
+           .title{
+           text-align: center;
+           font-size: 24px;
+           font-weight: bold;
+           color: #3c8dbc;
+           padding: 20px;
+           }
+           "
+    )
+  )),
+  
+  div(class = "title", "Compare players' actual values and expected values"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectInput(
+        "position",
+        "Position",
+        choices = Positions,
+        selected = Positions[1]
+      ),
+      
+      selectInput("level",
+                  "Level",
+                  choices = Levels,
+                  selected = Levels[3]),
+      
+      sliderInput(
+        "value_range",
+        "Value Range",
+        min = 3.7,
+        max = 13.1,
+        value = c(9.97, 13.1),
+        step = 0.1
+      ),
+      
+      checkboxGroupInput("types",
+                         "Show Stat",
+                         choices = stats_checkbox,
+                         selected = stats_attack),
+      
     ),
     
-    selectInput("level",
-                "Level",
-                choices = Levels,
-                selected = Levels[3]),
-    
-    sliderInput(
-      "value_range",
-      "Value Range",
-      min = 3.7,
-      max = 13.1,
-      value = c(9.97, 13.1),
-      step = 0.1
-    ),
-    
-    checkboxGroupInput("types",
-                       "Show Stat",
-                       choices = stats_checkbox,
-                       selected = stats_attack),
-    
+    mainPanel(plotOutput("plot"))
   ),
   
-  mainPanel(plotOutput("plot"))
-),
+  fluidRow(column(12, tableOutput("table")))
+)
 
-fluidRow(column(12, tableOutput("table"))))
-
-server <- function(input, output) {
+gridExtra_server <- function(input, output) {
   # define a function to get show stats
   get_stats_by_type <- function(type) {
     case_when(
@@ -984,16 +1026,9 @@ server <- function(input, output) {
     # remove plot NAs
     plot_list <-  plot_list[!is.na(plot_list)]
     if (length(plot_list) > 0) {
-      # add title
-      title <- textGrob("Compare players' actual values and expected values", gp = gpar(fontsize = 15))
       # arrange
-      grid.arrange(
-        grobs = plot_list,
-        ncol = 2,
-        bottom = title
-      )
+      grid.arrange(grobs = plot_list, ncol = 2, )
     }
-    
   })
   
   # plot for points
@@ -1057,7 +1092,7 @@ server <- function(input, output) {
       scale_color_viridis(discrete = TRUE) +
       xlab("Cost(m)") +
       ylab("") +
-      theme_ipsum() + 
+      theme_ipsum() +
       theme(legend.title = element_blank())
   }
   
@@ -1085,18 +1120,22 @@ server <- function(input, output) {
   
 }
 
-shinyApp(ui, server, options = list(height = '700', width = '100%'))
+shinyApp(
+  ui = gridExtra_ui,
+  server = gridExtra_server,
+  options = list(height = '750', width = '100%')
+)
 ```
 
 # Conclusion
 
 Let return to the top 50 players, after the discussions above, we can find out that xxx. Use a heatmap to verify our observation.
 
-```{r heatmap, fig.height=9, fig.width=10}
-# select the top 50 players
+```{r heatmap, fig.height=6, fig.width=8}
+# select the top 30 players
 plot_data <- performance_data %>%
   arrange(-Points) %>%
-  head(50) %>%
+  head(30) %>%
   mutate(
     Position_name = paste(Position, Player, sep = " - "),
     Side_color = case_when(
@@ -1109,20 +1148,32 @@ plot_data <- performance_data %>%
 
 # create heatmap data
 heatmap_data <- plot_data %>%
-  select(Points:xGc90_diff) %>%
+  select(Points:CS90) %>%
   as.matrix()
 
 # color, green for below average, blue for above average
 color_1 <-
-  colorRampPalette(colors = c('#5190FF', '#efedf5'))(6)[1:5]
-color_2 <- colorRampPalette(colors = c('#efedf5', '#00FF87'))(6)
+  colorRampPalette(colors = c('#00FF87', '#33CCFF'))(6)[1:5]
+color_2 <- colorRampPalette(colors = c('#33CCFF', '#5190FF'))(6)
 
-# classify attack stats and defence stats
+# classify general stats, attack stats and defense stats
 col_side_color <-
-  ifelse(
-    attr(heatmap_data, which = "dimnames")[[2]] %in% c("CS90", "GC90", "xGc90", "xGc90_diff"),
-    "#ec7014",
-    "#737373"
+  case_when(
+    attr(heatmap_data, which = "dimnames")[[2]] %in% c(
+      "Goals90",
+      "xG90",
+      "xG90_diff",
+      "Assists90",
+      "xA90",
+      "xA90_diff"
+    ) ~ "#ec7014",
+    attr(heatmap_data, which = "dimnames")[[2]] %in% c(
+      "CS90", 
+      "GC90", 
+      "xGc90", 
+      "xGc90_diff"
+    ) ~ "#737373",
+    .default = "purple"
   )
 
 # plot
@@ -1131,7 +1182,8 @@ heatmap(
   labRow = plot_data$Position_name,
   scale = "column",
   col = c(color_1, color_2),
-  cexRow = 0.6,
+  cexRow = 1.2,
+  cexCol = 1.2,
   RowSideColors = plot_data$Side_color,
   ColSideColors = col_side_color
 )
@@ -1139,25 +1191,33 @@ heatmap(
 # add legends
 legend(
   "topleft",
-  legend = c("GKP", "DEF", "MID", "FWD"),
-  cex = 0.8,
-  fill = c("#7fc97f", "#386cb0", "red", "#fdb462")
+  legend = c(
+    "Potion - FWD",
+    "Potion - MID",
+    "Potion - DEF",
+    "Potion - GKP",
+    "General",
+    "Offensive",
+    "Defensive",
+    "Above average",
+    "Average",
+    "Below Average"
+  ),
+  cex = 0.6,
+  pt.cex = 1,
+  fill = c(
+    "#7fc97f",
+    "#386cb0",
+    "red",
+    "#fdb462",
+    "purple",
+    "#ec7014",
+    "#737373",
+    "#5190FF",
+    "#33CCFF",
+    "#00FF87"
+  )
 )
-
-legend(
-  "top",
-  legend = c("Above average", "Average", "Below Average"),
-  cex = 0.8,
-  fill = c("#5190FF", "#efedf5", "#00FF87")
-)
-
-legend(
-  "topright",
-  legend = c("Offensive", "Defensive"),
-  cex = 0.8,
-  fill = c("#ec7014", "#737373")
-)
-
 ```
 
 
