@@ -1,27 +1,19 @@
 ---
-title: "FPL_Analysis_2223"
-author: "Tong Lan"
+title: "CITS4009 - Project 1"
+author: "Tong Lan (24056082)"
 date: "`r Sys.Date()`"
 output: 
   html_document: 
     code_folding: show
 runtime: shiny
 ---
-
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-#knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(echo=TRUE)
+knitr::opts_chunk$set(warning=FALSE)
 ```
-
-# **CITS4009 - Project 1**
-
-## Tong LAN (24056082)
-
 ## Introduction
 
-The **Premier League** (legal name: **The Football Association Premier League Limited**) represents the highest level of the [English football league system](https://en.wikipedia.org/wiki/English_football_league_system). Twenty clubs compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season.
-
-(<https://en.wikipedia.org/wiki/Premier_League>)
+[The Premier League (officially known as The Football Association Premier League Limited)][1] is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. The Fantasy Premier League (FPL) is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023.[2] The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League.[3]
 
 The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. It contains
 
@@ -33,11 +25,11 @@ The Premier League, also known as the English Premier League or the EPL, is the 
 
 ## Goal of the project
 
-This project is for exploring the data of 2011-12 season FPL data, find out the relatinship between players and their overall_points, base on their playing position and their value in the FPL.
+This project is for exploring the data of 2011-12 season FPL data, find out the relationship between players and their overall_points, base on their playing position and their value in the FPL.
 
-## Data loading
+## Data preparing
 
-### load library
+load library
 ```{r library, message=FALSE}
 library(tidyverse)
 library(shiny)
@@ -51,7 +43,7 @@ library(grid)
 library(gridExtra)
 ```
 
-#### load data.csv
+load data.csv
 ```{r data_file, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
@@ -1220,4 +1212,9 @@ legend(
 )
 ```
 
+<!-- # Reference -->
+<!-- 1. "https://en.wikipedia.org/wiki/English_football_league_system". *"en.wikipedia.org"*. -->
 
+[1]: https://en.wikipedia.org/wiki/English_football_league_system
+[2]: 
+[3]: How Many Play FPL?. allaboutfpl.com.
