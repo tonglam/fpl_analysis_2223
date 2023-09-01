@@ -4,32 +4,29 @@ author: "Tong Lan (24056082)"
 date: "`r Sys.Date()`"
 output: 
   html_document: 
-    code_folding: show
+    code_folding: hide
 runtime: shiny
 ---
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo=TRUE)
 knitr::opts_chunk$set(warning=FALSE)
 ```
-## Introduction
 
-[The Premier League (officially known as The Football Association Premier League Limited)][1] is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. The Fantasy Premier League (FPL) is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023.[2] The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League.[3]
+[Video link for introducing the project's Shiny apps]()
 
-The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. It contains
+# Introduction
 
-Fantasy Premier League(FPL) is the official fantasy football game of English Premier League, played nearly by 8 million managers all across the globe.
+*The Premier League (officially known as The Football Association Premier League Limited)* [[1]][ref1] is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. *The Fantasy Premier League (FPL)* is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023. [[2]][ref2] The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League. [[3]][ref3]
 
-The Premier League, also known as the English Premier League or the EPL, is the top level of the English football league system. Contested by 20 clubs, it operates on a system of promotion and relegation with the English Football League. Seasons typically run from August to May with each team playing 38 matches.
+The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. [[4]][ref4] It is a basic dataset containing the aggregated fantasy premier league data taken from *the official website Fantasy Premier League* [[5]][ref5]. In Fantasy Premier League, players create a fictional team composed of real-life football players and earn points based on their performance statistics or perceived on-field contributions. [[6]][ref6]
 
-<https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023>
+This project explores the 2022-23 season FPL data to identify connections and relationships between players' total scoring points, their positions, and values. It focuses especially on the top-scoring players to investigate what makes them perform well in the 2022-23 season. By analyzing and utilizing data from this project, FPL managers can improve their game strategy.
 
-## Goal of the project
+# Loading Data
 
-This project is for exploring the data of 2011-12 season FPL data, find out the relationship between players and their overall_points, base on their playing position and their value in the FPL.
+Load necessary libraries for the project.
 
-## Data preparing
-
-load library
 ```{r library, message=FALSE}
 library(tidyverse)
 library(shiny)
@@ -43,38 +40,41 @@ library(grid)
 library(gridExtra)
 ```
 
-load data.csv
+Load the dataset from a CSV file for the project.
+
 ```{r data_file, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
 
-#### overview the data
+# Overview Data
+
+To begin, we need to review the input dataset. We can do this by using the `glimpse()` function to get a general overview of the raw data, followed by using the `str()` function to examine the dataset structure. Next, we can use the `summary()` function to get a summary of the dataset. Finally, we can use the `head()` function to take a look at the first six lines of the dataset.
 
 ```{r glimpse, results='hide'}
 glimpse(fpl_raw_data)
-```
-
-
-```{r str, results='hide'}
 str(fpl_raw_data)
 ```
 
-From the structure of the data we can see, there is 713 rows and 19 columns. Next, we use summary() to glimpse the data. We can find out that each row presents a player, so we have 713 players for the 11-12 season, a player get total points from -3 to 244. average is 28, it is a huge range. Then, we can view the default first 6 rows by use head() function, it shows that each row contains many details including how many goals each player scores, assists and so on.
+The `glimpse()` function and `str()` function show that the dataset has 778 rows and 75 columns and contains various data types including integer, character, double, etc. The dataset also has missing values(NA) that need to be handled.
 
 ```{r summary, results='hide'}
 summary(fpl_raw_data)
 ```
 
+The `summary()` function indicates that each row in the dataset represents a player, resulting in a total of 778 players for the 2022-23 season. The point total for each player ranges from 0 to 272, with an average of 40.78. The cost for each player ranges from 37 to 131, with a median of 45. According to the rule from the official FPL website [[5]][ref5], a player’s value should be between 3.0 and 14.0, and the total budget for 15 selected players is 100. We can note that the cost values are 10 times larger for easier storage in the database. The cost values might be a useful statistic to explore further.
+
 ```{r head, results='hide'}
 head(fpl_raw_data)
 ```
 
-# Initial transform
+Using the `head()` function, we can view the default first 6 rows, which contain various details such as the number of goals, assists, and other statistics for each player.
 
-The next step we try to do is transforming the data, for a easy understanding. For our goal in this project, we should cut the raw data, and remain field of the below list: First_Name, Second_Name, Club, Position, Total_Points. And we can combine the row "First_Name" and row "Second_Name" to a new Row "Name". So, we create a subset named "fpl_data" for further explore. After that, let's take a look at the structure of fpl_data. Transform the data frame into tibble makes it easiler to manipulate.
+# Initial Transform
 
-Rank the players based on their total_point, adding a new column named "Rank" before column "Name".
+Before starting our exploratory data analysis, we should perform an initial transformation to make the dataset more suitable for further use. As discussed earlier, player costs range from 3.0 to 14.0, which can separate them into three different value levels: **Low**, **Middle**, and **Premium**.
+
+To explore the most important data in FPL, which is players' total points, we should first examine the players' key performance data. Extract these data from the raw dataset and rename them for ease of exploratory data analysis. After this step, let's take a look at the transformed data for its first 5 rows.
 
 ```{r transform_1, echo=TRUE}
 # get level function
@@ -147,7 +147,7 @@ fpl_data <- fpl_raw_data[c(
 rm(fpl_raw_data)
 
 # show the table(first six rows)
-knitr::kable(fpl_data[1:5,], caption =  "first 5 rows of fpl_data")
+knitr::kable(fpl_data[1:5,], caption =  "First 5 rows of fpl_data")
 ```
 
 ```{r transform_2, include=FALSE}
@@ -157,13 +157,15 @@ Clubs <- unique(fpl_data$Club)
 Costs <- seq(from = 4, to = 13.5, by = 0.5)
 ```
 
-# visualize
+# Exploring Points Distribution
 
-## top 50 players
+## Points Distribution of Players
+
+The first thing we want to explore is the distribution of points for players, as points are what FPL is all about. To gain a clear insight, we can analyse players who played regularly, which means they played at least 1000 minutes in a single season.
 
 ```{r desity}
 fpl_data %>%
-  filter(Minutes > 1000) %>%
+  filter(Minutes >= 1000) %>%
   ggplot(aes(x = Points)) +
   geom_density(fill = "#69b3a2",
                color = "#e9ecef",
@@ -174,11 +176,11 @@ fpl_data %>%
   theme(plot.title = element_text(size = 20))
 ```
 
-# multiple desity, group by position
+The density plot reveals that players' total points are typically centered around 80-100 points, although the top player can score over 200 points in a season. According to FPL rules [[7]][ref7], players from different positions have different methods for calculating their scoring points. Therefore, we can group players by position and examine their point distributions.
 
 ```{r multiple_desity}
 fpl_data %>%
-  filter(Minutes > 1000) %>%
+  filter(Minutes >= 1000) %>%
   ggplot(aes(x = Points, group = Position, fill = Position)) +
   geom_density(adjust = 1.5, alpha = 0.6) +
   xlim(0, 300) +
@@ -189,12 +191,17 @@ fpl_data %>%
         plot.subtitle = element_text(size = 14))
 ```
 
-# look at the top 30 players
+Based on the multiple density plot, it is evident that the distribution of defenders is the most concentrated, resulting in them scoring fewer points than other positions. While goalkeepers have a wider range of points, even the best goalkeeper cannot score very high points. The distribution of midfielders and forwards is similar, but the top forwards have the potential to score the most points in a season.
+
+## Top 50 Players
+
+Once we have a general understanding of the total points earned by players, our next step is to examine the top 50 players.
 
 ```{r barplot, fig.height=12}
 fpl_data %>%
   arrange(-Points) %>%
   head(50) %>%
+  mutate(Player = paste0(Player, " - ", Cost, "m", sep = " ")) %>%
   mutate(Player = fct_reorder(Player, Points)) %>%
   ggplot(aes(x = Player, y = Points, fill = Position)) +
   geom_bar(stat = "identity",
@@ -215,7 +222,13 @@ fpl_data %>%
   theme_ipsum()
 ```
 
-# points and positons
+The horizontal barplot confirms our observations that the top 6 players, all of whom scored more than 200 points, are midfielders and forwards. Additionally, players who cost more in the same position tend to score better points. This suggests a correlation between points, positions, and values that should be explored in the next step.
+
+# Correlation between Points and Positions and Values
+
+
+
+## Correlation between Points and Positons
 
 ```{r shiny_multiple_distribution}
 multiple_distribution_ui <-  fluidPage(
@@ -374,130 +387,8 @@ shinyApp(
 )
 ```
 
-# values and points
-```{r shiny_scatter}
-scatter_ui <- fluidPage(
-  tags$head(tags$style(
-    HTML(
-      "
-           .title{
-           text-align: center;
-           font-size: 24px;
-           font-weight: bold;
-           color: #3c8dbc;
-           padding: 20px;
-           }
-           "
-    )
-  )),
-  div(class = "title", "Compare Player Points by Level or Value"),
-  
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("level",
-                  "Level",
-                  choices = Levels,
-                  selected = Levels[2]),
-      
-      sliderInput(
-        "value_range",
-        "Value Range",
-        min = 3.7,
-        max = 13.1,
-        value = c(6.83, 9.97),
-        step = 0.1
-      )
-      
-    ),
-    mainPanel(plotOutput("scatter"))
-  )
-)
-
-scatter_server <- function(input, output) {
-  # change the value slider depends on level
-  observeEvent(input$level, {
-    new_level <- input$level
-    if (new_level == Levels[1]) {
-      updateSliderInput(inputId = "value_range", value = c(3.7, 6.83))
-    } else if (new_level == Levels[2]) {
-      updateSliderInput(inputId = "value_range", value = c(6.83, 9.97))
-    } else {
-      updateSliderInput(inputId = "value_range", value = c(9.97, 13.1))
-    }
-  })
-  
-  output$scatter <- renderPlot({
-    plot_data <- fpl_data %>%
-      filter(Points > 50) %>%
-      filter(Cost > input$value_range[1], Cost <= input$value_range[2])
-    
-    ggplot(plot_data, aes(x = Points, y = Cost)) +
-      geom_point(aes(color = Position, shape = Position),
-                 size = 1.5,
-                 alpha = 0.8) +
-      scale_color_manual(values = c("#386cb0", "#fdb462", "#7fc97f", "red")) +
-      xlim(0, 300) +
-      geom_text_repel(
-        aes(label = Player),
-        family = "Poppins",
-        size = 3,
-        min.segment.length = 0,
-        seed = 42,
-        box.padding = 0.5,
-        max.overlaps = Inf,
-        nudge_x = .15,
-        nudge_y = .5,
-        color = "grey50"
-      ) +
-      labs(x = "total points",
-           y = "cost(m)") +
-      theme(
-        # The default font when not explicitly specified
-        text = element_text(
-          family = "Lobster Two",
-          size = 8,
-          color = "black"
-        ),
-        
-        # Customize legend text, position, and background.
-        legend.text = element_text(size = 9, family = "Roboto"),
-        legend.position = c(1, 0.85),
-        legend.justification = c(1, 0),
-        legend.background = element_blank(),
-        # This one removes the background behind each key in the legend
-        legend.key = element_blank(),
-        legend.title = element_blank(),
-        
-        # Adjust axis parameters such as size and color.
-        axis.text = element_text(size = 10, color = "black"),
-        axis.title = element_text(size = 12),
-        axis.ticks = element_blank(),
-        # Axis lines are now lighter than default
-        axis.line = element_line(colour = "grey50"),
-        
-        # Only keep y-axis major grid lines, with a grey color and dashed type.
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(color = "#b4aea9", linetype =
-                                            "dashed"),
-        
-        # Use a light color for the background of the plot and the panel.
-        panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-        plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
-      )
-    
-  })
-}
-
-shinyApp(ui = scatter_ui,
-         server = scatter_server,
-         options = list(height = '500', width = '100%'))
-```
 
 
-# high value(premium) players have a higher conver rate, are closer to the expected values
-
-# data_transform, divide players by group, step = 1
 ```{r shiny_radar}
 # different position compare different data in radar chart
 get_radarCols <- function(Position) {
@@ -751,6 +642,132 @@ shinyApp(
 ```
 
 
+
+## Correlation between Points and Values
+
+```{r shiny_scatter}
+scatter_ui <- fluidPage(
+  tags$head(tags$style(
+    HTML(
+      "
+           .title{
+           text-align: center;
+           font-size: 24px;
+           font-weight: bold;
+           color: #3c8dbc;
+           padding: 20px;
+           }
+           "
+    )
+  )),
+  div(class = "title", "Compare Player Points by Level or Value"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("level",
+                  "Level",
+                  choices = Levels,
+                  selected = Levels[2]),
+      
+      sliderInput(
+        "value_range",
+        "Value Range",
+        min = 3.7,
+        max = 13.1,
+        value = c(6.83, 9.97),
+        step = 0.1
+      )
+      
+    ),
+    mainPanel(plotOutput("scatter"))
+  )
+)
+
+scatter_server <- function(input, output) {
+  # change the value slider depends on level
+  observeEvent(input$level, {
+    new_level <- input$level
+    if (new_level == Levels[1]) {
+      updateSliderInput(inputId = "value_range", value = c(3.7, 6.83))
+    } else if (new_level == Levels[2]) {
+      updateSliderInput(inputId = "value_range", value = c(6.83, 9.97))
+    } else {
+      updateSliderInput(inputId = "value_range", value = c(9.97, 13.1))
+    }
+  })
+  
+  output$scatter <- renderPlot({
+    plot_data <- fpl_data %>%
+      filter(Points > 50) %>%
+      filter(Cost > input$value_range[1], Cost <= input$value_range[2])
+    
+    ggplot(plot_data, aes(x = Points, y = Cost)) +
+      geom_point(aes(color = Position, shape = Position),
+                 size = 1.5,
+                 alpha = 0.8) +
+      scale_color_manual(values = c("#386cb0", "#fdb462", "#7fc97f", "red")) +
+      xlim(0, 300) +
+      geom_text_repel(
+        aes(label = Player),
+        family = "Poppins",
+        size = 3,
+        min.segment.length = 0,
+        seed = 42,
+        box.padding = 0.5,
+        max.overlaps = Inf,
+        nudge_x = .15,
+        nudge_y = .5,
+        color = "grey50"
+      ) +
+      labs(x = "total points",
+           y = "cost(m)") +
+      theme(
+        # The default font when not explicitly specified
+        text = element_text(
+          family = "Lobster Two",
+          size = 8,
+          color = "black"
+        ),
+        
+        # Customize legend text, position, and background.
+        legend.text = element_text(size = 9, family = "Roboto"),
+        legend.position = c(1, 0.85),
+        legend.justification = c(1, 0),
+        legend.background = element_blank(),
+        # This one removes the background behind each key in the legend
+        legend.key = element_blank(),
+        legend.title = element_blank(),
+        
+        # Adjust axis parameters such as size and color.
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 12),
+        axis.ticks = element_blank(),
+        # Axis lines are now lighter than default
+        axis.line = element_line(colour = "grey50"),
+        
+        # Only keep y-axis major grid lines, with a grey color and dashed type.
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "#b4aea9", linetype =
+                                            "dashed"),
+        
+        # Use a light color for the background of the plot and the panel.
+        panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+        plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
+      )
+    
+  })
+}
+
+shinyApp(ui = scatter_ui,
+         server = scatter_server,
+         options = list(height = '500', width = '100%'))
+```
+
+# high value(premium) players have a higher conver rate, are closer to the expected values
+
+# data_transform, divide players by group, step = 1
+
 # will club make a high xG coverted rate player to be a pk taker?
 
 ```{r transform_3, results='hide'}
@@ -835,15 +852,13 @@ performance_data[c(
   geom_jitter(alpha = .5, size = 1)
 ```
 
-Outlier should be players play less than 90, so their per90 values are extremely high.
-Transfer these data into NA, because when we are trying to analyse the performance of players by using the per90 data, these players who played less than 90 mins make no sense.
+Outlier should be players play less than 90, so their per90 values are extremely high. Transfer these data into NA, because when we are trying to analyse the performance of players by using the per90 data, these players who played less than 90 mins make no sense.
 
 ```{r transform_4}
 performance_data <- performance_data %>% 
   mutate_all(~ifelse(Minutes < 90, NA, .)) %>% 
   na.omit()
 ```
-
 
 ```{r shiny_gridExtra}
 # type checkbox choices
@@ -1212,9 +1227,24 @@ legend(
 )
 ```
 
-<!-- # Reference -->
-<!-- 1. "https://en.wikipedia.org/wiki/English_football_league_system". *"en.wikipedia.org"*. -->
+# Reference
 
-[1]: https://en.wikipedia.org/wiki/English_football_league_system
-[2]: 
-[3]: How Many Play FPL?. allaboutfpl.com.
+1. ["English football league system"](https://en.wikipedia.org/wiki/English_football_league_system). *en.wikipedia.org.*
+2. ["How Many Play FPL?"](https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/). *allaboutfpl.com.*
+3. ["Fantasy_Premier_League"](https://en.wikipedia.org/wiki/Fantasy_Premier_League). *en.wikipedia.org.*
+4. ["Fantasy Premier League Dataset 2022-2023"](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023). *www.kaggle.com*
+5. ["Official Website Fantasy Premier League"](https://fantasy.premierleague.com/). *fantasy.premierleague.com*
+6. ["Fantasy football (association)"](https://en.wikipedia.org/wiki/Fantasy_football_(association)). *en.wikipedia.org.*
+7. ["Official Website Fantasy Premier League Rules"](https://fantasy.premierleague.com/help/rules). *fantasy.premierleague.com*
+
+98. ["TheDataDigest"](https://www.youtube.com/@TheDataDigest). *www.youtube.com*
+99. ["Equitable Equations"](https://www.youtube.com/@EquitableEquations). *www.youtube.com*
+
+[ref1]: https://en.wikipedia.org/wiki/English_football_league_system
+[ref2]: https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/
+[ref3]: https://en.wikipedia.org/wiki/Fantasy_Premier_League
+[ref4]: https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023
+[ref5]: https://fantasy.premierleague.com/
+[ref6]: https://en.wikipedia.org/wiki/Fantasy_football_(association)
+[ref7]: https://fantasy.premierleague.com/help/rules
+
