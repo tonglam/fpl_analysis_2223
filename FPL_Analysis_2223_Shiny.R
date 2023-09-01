@@ -78,7 +78,7 @@ fpl_data <- fpl_raw_data[c(
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin) %>%
   # generate per 90 stats and diff stats
-  mutate(xG_diff = Goals - xG, .after = xG,) %>%
+  mutate(xG_diff = Goals - xG, .after = xG, ) %>%
   mutate(xA_diff = Assists - xA, .after = xA) %>%
   mutate(xGc_diff = GC - xGc, .after = xGc) %>%
   mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
@@ -108,7 +108,7 @@ performance_data <- fpl_data[c(
   "xGc90_diff",
   "CS90"
 )] %>%
-  mutate_all( ~ ifelse(Minutes < 90, NA, .)) %>%
+  mutate_all(~ ifelse(Minutes < 90, NA, .)) %>%
   na.omit()
 
 # remove data: fpl_raw_data to save memory
@@ -201,21 +201,22 @@ ui <-
                      padding: 10px;
                      }"
           )
-        )), 
+        )),
         div(class = "title", "Total points distribution across different levels"),
         
         sidebarLayout(
-          sidebarPanel(width = 2,
-                selectInput(
-                  "distribution_type",
-                  "Chart Type",
-                  choices = list(
-                    "boxplot" = 1,
-                    "violin" = 2,
-                    "donut" = 3
-                  ),
-                  selected = 1,
-                ), 
+          sidebarPanel(
+            width = 2,
+            selectInput(
+              "distribution_type",
+              "Chart Type",
+              choices = list(
+                "boxplot" = 1,
+                "violin" = 2,
+                "donut" = 3
+              ),
+              selected = 1,
+            ),
             
             checkboxGroupInput(
               "distribution_positions",
@@ -239,7 +240,7 @@ ui <-
               ),
               selected = Levels
             ),
-
+            
           ),
           
           mainPanel(width = 10, plotOutput("multiple_distribution_plot"))
@@ -267,10 +268,12 @@ ui <-
           
           sidebarLayout(
             sidebarPanel(
-              selectInput("scatter_level",
-                          "Level",
-                          choices = Levels,
-                          selected = Levels[2]),
+              selectInput(
+                "scatter_level",
+                "Level",
+                choices = Levels,
+                selected = Levels[2]
+              ),
               
               sliderInput(
                 "scatter_value_range",
@@ -305,53 +308,57 @@ ui <-
           div(class = "title", "Compare two different players in the same position"),
           
           sidebarLayout(
-            sidebarPanel(width = 3, 
-              tabsetPanel(
-              tabPanel(
-                "Player 1",
-                selectInput("radar_club1",
-                            "Club",
-                            choices = Clubs,
-                            selected = Clubs[1]),
-                
-                selectInput(
-                  "radar_position1",
-                  "Position",
-                  choices = Positions,
-                  selected = Positions[1]
-                ),
-                
-                selectInput("radar_player1",
-                            "Name",
-                            choices = NULL),
-                
-                textInput("radar_value1",
-                          "Value",
-                          value = NULL)
-                
-              ),
-              
-              tabPanel(
-                "Player 2",
-                selectInput("radar_club2",
-                            "Club",
-                            choices = Clubs,
-                            selected = Clubs[1]),
-                
-                selectInput("radar_position2",
-                            "Position",
-                            choices = NULL),
-                
-                
-                selectInput("radar_player2",
-                            "Name",
-                            choices = NULL),
-                
-                textInput("radar_value2",
-                          "Value",
-                          value = NULL),
-              )
-            )),
+            sidebarPanel(width = 3,
+                         tabsetPanel(
+                           tabPanel(
+                             "Player 1",
+                             selectInput(
+                               "radar_club1",
+                               "Club",
+                               choices = Clubs,
+                               selected = Clubs[1]
+                             ),
+                             
+                             selectInput(
+                               "radar_position1",
+                               "Position",
+                               choices = Positions,
+                               selected = Positions[1]
+                             ),
+                             
+                             selectInput("radar_player1",
+                                         "Name",
+                                         choices = NULL),
+                             
+                             textInput("radar_value1",
+                                       "Value",
+                                       value = NULL)
+                             
+                           ),
+                           
+                           tabPanel(
+                             "Player 2",
+                             selectInput(
+                               "radar_club2",
+                               "Club",
+                               choices = Clubs,
+                               selected = Clubs[1]
+                             ),
+                             
+                             selectInput("radar_position2",
+                                         "Position",
+                                         choices = NULL),
+                             
+                             
+                             selectInput("radar_player2",
+                                         "Name",
+                                         choices = NULL),
+                             
+                             textInput("radar_value2",
+                                       "Value",
+                                       value = NULL),
+                           )
+                         )),
             mainPanel(width = 7, plotOutput("radar_plot"), tableOutput("radar_table"))
           )
         )
@@ -377,7 +384,8 @@ ui <-
         div(class = "title", "Compare players' actual values and expected values"),
         
         sidebarLayout(
-          sidebarPanel(width = 2,
+          sidebarPanel(
+            width = 2,
             selectInput(
               "grid_position",
               "Position",
@@ -385,10 +393,12 @@ ui <-
               selected = Positions[1]
             ),
             
-            selectInput("grid_level",
-                        "Level",
-                        choices = Levels,
-                        selected = Levels[3]),
+            selectInput(
+              "grid_level",
+              "Level",
+              choices = Levels,
+              selected = Levels[3]
+            ),
             
             sliderInput(
               "grid_value_range",
@@ -399,20 +409,20 @@ ui <-
               step = 0.1
             ),
             
-            checkboxGroupInput("grid_types",
-                               "Show Stat",
-                               choices = stats_checkbox,
-                               selected = stats_attack),
+            checkboxGroupInput(
+              "grid_types",
+              "Show Stat",
+              choices = stats_checkbox,
+              selected = stats_attack
+            ),
             
           ),
           
           mainPanel(width = 10, plotOutput("grid_plot"))
         ),
         
-        fluidRow(
-          column(3),
-          column(9, tableOutput("grid_table"))
-          )
+        fluidRow(column(3),
+                 column(9, tableOutput("grid_table")))
       )
     )
     
@@ -523,7 +533,8 @@ server <- function(input, output) {
   output$scatter <- renderPlot({
     plot_data <- fpl_data %>%
       filter(Points > 50) %>%
-      filter(Cost > input$scatter_value_range[1], Cost <= input$scatter_value_range[2])
+      filter(Cost > input$scatter_value_range[1],
+             Cost <= input$scatter_value_range[2])
     
     ggplot(plot_data, aes(x = Points, y = Cost)) +
       geom_point(aes(color = Position, shape = Position),
@@ -585,7 +596,8 @@ server <- function(input, output) {
   # player 1 filter
   player1_filter <- reactive({
     fpl_data %>%
-      filter(Club == input$radar_club1, Position == input$radar_position1) %>%
+      filter(Club == input$radar_club1,
+             Position == input$radar_position1) %>%
       arrange(desc(Cost))
   })
   
@@ -597,9 +609,11 @@ server <- function(input, output) {
   # player 2 filter
   player2_filter <- reactive({
     fpl_data %>%
-      filter(Club == input$radar_club2,
-             Position == input$radar_position2,
-             Player != input$radar_player1) %>%
+      filter(
+        Club == input$radar_club2,
+        Position == input$radar_position2,
+        Player != input$radar_player1
+      ) %>%
       arrange(desc(Cost))
   })
   
@@ -610,7 +624,8 @@ server <- function(input, output) {
   
   # player 2 position depends on player 1
   observeEvent(input$radar_position1, {
-    updateSelectInput(inputId = "radar_position2", choices = c(input$radar_position1))
+    updateSelectInput(inputId = "radar_position2",
+                      choices = c(input$radar_position1))
   })
   
   # player 1 value depends on player 1 name
@@ -709,8 +724,10 @@ server <- function(input, output) {
   
   output$radar_table <- renderTable({
     radar_data_filter() %>%
-      mutate(Player = c(input$radar_player1, input$radar_player2),
-             .before = Points) %>% 
+      mutate(
+        Player = c(input$radar_player1, input$radar_player2),
+        .before = Points
+      ) %>%
       mutate(Player = c(input$radar_value1, input$radar_value2),
              .after = Player)
   })
@@ -767,9 +784,11 @@ server <- function(input, output) {
     
     # plot_data
     plot_data <- performance_data %>%
-      filter(Cost > input$grid_value_range[1],
-             Cost <= input$grid_value_range[2],
-             Position == input$grid_position)
+      filter(
+        Cost > input$grid_value_range[1],
+        Cost <= input$grid_value_range[2],
+        Position == input$grid_position
+      )
     
     player_number <- length(plot_data)
     
@@ -810,7 +829,7 @@ server <- function(input, output) {
     plot_list <-  plot_list[!is.na(plot_list)]
     if (length(plot_list) > 0) {
       # arrange
-      grid.arrange(grobs = plot_list, ncol = 2, )
+      grid.arrange(grobs = plot_list, ncol = 2,)
     }
   })
   
@@ -893,9 +912,11 @@ server <- function(input, output) {
     }
     show_stats <- show_stats[show_stats != ""]
     performance_data %>%
-      filter(Cost > input$grid_value_range[1],
-             Cost <= input$grid_value_range[2],
-             Position == input$grid_position) %>%
+      filter(
+        Cost > input$grid_value_range[1],
+        Cost <= input$grid_value_range[2],
+        Position == input$grid_position
+      ) %>%
       arrange(desc(Cost)) %>%
       select(all_of(c("Player", "Level", "Cost", show_stats)))
   })
