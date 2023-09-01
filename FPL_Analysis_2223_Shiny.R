@@ -62,8 +62,8 @@ fpl_data <- fpl_raw_data[c(
       xA = "expected_assists",
       xA90 = "expected_assists_per_90",
       GC = "goals_conceded",
-      xGc = "expected_goals_conceded",
-      xGc90 = "expected_goals_conceded_per_90",
+      xGC = "expected_goals_conceded",
+      xGC90 = "expected_goals_conceded_per_90",
       Saves = "saves",
       Saves90 = "saves_per_90",
       CS = "clean_sheets",
@@ -80,13 +80,13 @@ fpl_data <- fpl_raw_data[c(
   # generate per 90 stats and diff stats
   mutate(xG_diff = Goals - xG, .after = xG, ) %>%
   mutate(xA_diff = Assists - xA, .after = xA) %>%
-  mutate(xGc_diff = GC - xGc, .after = xGc) %>%
+  mutate(xGC_diff = GC - xGC, .after = xGC) %>%
   mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
   mutate(xG90_diff = Goals90 - xG90, .after = xG90) %>%
   mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
   mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
-  mutate(GC90 = GC / (Minutes / 90), .before = xGc90) %>%
-  mutate(xGc90_diff = GC90 - xGc90, .after = xGc90)
+  mutate(GC90 = GC / (Minutes / 90), .before = xGC90) %>%
+  mutate(xGC90_diff = GC90 - xGC90, .after = xGC90)
 
 performance_data <- fpl_data[c(
   "Player",
@@ -104,8 +104,8 @@ performance_data <- fpl_data[c(
   "xA90",
   "xA90_diff",
   "GC90",
-  "xGc90",
-  "xGc90_diff",
+  "xGC90",
+  "xGC90_diff",
   "CS90"
 )] %>%
   mutate_all(~ ifelse(Minutes < 90, NA, .)) %>%
@@ -137,8 +137,8 @@ get_radarCols <- function(Position) {
     return (c(
       "Points",
       "GC",
-      "xGc",
-      "xGc90",
+      "xGC",
+      "xGC90",
       "Minutes",
       "CS90",
       "CS",
@@ -148,8 +148,8 @@ get_radarCols <- function(Position) {
     return (c(
       "Points",
       "GC",
-      "xGc",
-      "xGc90",
+      "xGC",
+      "xGC90",
       "Minutes",
       "Saves90",
       "Saves",
@@ -178,7 +178,7 @@ stats_points <- c("Points")
 stats_minutes <- c("Minutes")
 stats_goals <- c("Goals90", "xG90", "xG90_diff")
 stats_assists <- c("Assists90", "xA90", "xA90_diff")
-stats_gc <- c("GC90", "xGc90", "xGc90_diff")
+stats_gc <- c("GC90", "xGC90", "xGC90_diff")
 stats_cs <- c("CC90")
 all_stats <-
   c(stats_points, stats_goals, stats_assists, stats_gc, stats_cs)
@@ -829,7 +829,7 @@ server <- function(input, output) {
     plot_list <-  plot_list[!is.na(plot_list)]
     if (length(plot_list) > 0) {
       # arrange
-      grid.arrange(grobs = plot_list, ncol = 2,)
+      grid.arrange(grobs = plot_list, ncol = 2)
     }
   })
   
@@ -868,7 +868,7 @@ server <- function(input, output) {
   # plot for goals concede
   gc_plot <- function(plot_data) {
     plot_data %>%
-      select(c("Cost", "GC90", "xGc90", "xGc90_diff")) %>%
+      select(c("Cost", "GC90", "xGC90", "xGC90_diff")) %>%
       pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
       plot()
   }
