@@ -93,15 +93,11 @@ fpl_data <- fpl_raw_data[c(
   "minutes",
   "goals_scored",
   "expected_goals",
-  "expected_goals_per_90",
   "assists",
   "expected_assists",
-  "expected_assists_per_90",
   "goals_conceded",
   "expected_goals_conceded",
-  "expected_goals_conceded_per_90",
   "clean_sheets",
-  "clean_sheets_per_90",
   "penalties_order"
 )] %>%
   rename(all_of(
@@ -115,15 +111,11 @@ fpl_data <- fpl_raw_data[c(
       Minutes = "minutes",
       Goals = "goals_scored",
       xG = "expected_goals",
-      xG90 = "expected_goals_per_90",
       Assists = "assists",
       xA = "expected_assists",
-      xA90 = "expected_assists_per_90",
       GC = "goals_conceded",
       xGC = "expected_goals_conceded",
-      xGC90 = "expected_goals_conceded_per_90",
       CS = "clean_sheets",
-      CS90 = "clean_sheets_per_90",
       PK_Taker = "penalties_order"
     )
   )) %>%
