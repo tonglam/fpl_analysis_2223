@@ -28,6 +28,11 @@ This project explores the 2022-23 season FPL data to identify connections and re
 Load necessary libraries for the project.
 
 ```{r library, message=FALSE}
+# install.packages("tidyverse")
+# install.packages("viridis")
+# install.packages("hrbrthemes")
+# install.packages("gridExtra")
+
 library(tidyverse)
 library(viridis)
 library(hrbrthemes)
@@ -243,9 +248,12 @@ As players have varying playing times, it is inaccurate to use actual or expecte
 
 ```{r transform_2, results='hide'}
 fpl_data <- fpl_data %>%
-  mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
-  mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
-  mutate(GC90 = GC / (Minutes / 90), .before = xGC90)
+  mutate(Goals90 = Goals / (Minutes / 90), .after = Goals) %>%
+  mutate(xG90 = xG / (Minutes / 90), .after = xG) %>%
+  mutate(Assists90 = Assists / (Minutes / 90), .after = Assists) %>%
+  mutate(xA90 = xA / (Minutes / 90), .after = xA) %>%
+  mutate(GC90 = GC / (Minutes / 90), .after = GC) %>%
+  mutate(xGC90 = xGC / (Minutes / 90), .after = xGC)
 
 # new data table
 knitr::kable(fpl_data[1:5,], caption = "First 5 rows of fpl_data adding per 90")
@@ -282,13 +290,13 @@ performance_data <- fpl_data[c(
   "xA90",
   "GC90",
   "xGC90",
-  "CS90"
+  "CS"
 )]
 ```
 
 ## Handle Invalid per 90 Values
 
-Let's begin by examining the distribution of actual per 90 values. The horizontal violin chart allows us to observe that there are outliers present in the actual values that deviate significantly from the others.
+Let's begin by examining the distribution of actual per 90 values. The boxplot allows us to observe that there are outliers present in the actual values that deviate significantly from the others.
 
 ```{r boxplot}
 # create a new data frame for plot[Cost, Value, Type], which is not a tidy data
@@ -297,9 +305,8 @@ performance_data[c("Minutes",
                    "Points90",
                    "Goals90",
                    "Assists90",
-                   "GC90",
-                   "CS90")] %>%
-  pivot_longer (2:6, names_to = "Per90", values_to = "Value") %>%
+                   "GC90")] %>%
+  pivot_longer (2:5, names_to = "Per90", values_to = "Value") %>%
   ggplot(aes(
     x = Per90,
     y = Value,
@@ -329,7 +336,7 @@ performance_data <- performance_data %>%
 
 For observing the correlation between a player's cost and their performance, we can focus on regular players who have played more than 90 minutes and scored at least one goal or provided at least one assist for an entire season. These regular players are the foundation of every club's attacking performance. We can use a scatter plot with the `geom_smooth()` function to observe any possible correlation. For a small dataset, we will use *LOESS* method to fit the smooth curve. [[12]][ref12]
 
-To prepare for visualization, it is necessary to perform some data transformations. Two new data frames can be created: one named "goals_performance" which combines the players' Goals90 and xG90, and another named "assists_performance" which combines the players' assist data. For defenders, a "goalsConcede_performance" can be created to observe their actual performance versus expected performance.
+To prepare for visualization, it is necessary to perform some data transformations. Two new data frames can be created: one named "goals_performance" which combines the players' Goals90 and xG90, and another named "assists_performance" which combines the players' assist data. For defenders, a "goalsConceded_performance" can be created to observe their actual performance versus expected performance.
 
 ```{r grid_scatter_smooth, fig.height=7, fig.width=10}
 # goals performance
@@ -382,7 +389,7 @@ In the second row, we can see how defenders and goalkeepers perform in terms of 
 
 # Explore Club's Penalty Takers
 
-Penalties are the most probable opportunities to score during a football match, with each penalty shoot given an xG of 0.78 xG of the StatsBomb xG 2022 model[[]][]. Accordingly, clubs should meticulously choose their penalty takers. Ideally, a player with a higher conversion ratio would be superior at finishing, possess improved shooting skills, and increase the likelihood of scoring the penalty kick.
+Penalties are the most probable opportunities to score during a football match, with each penalty shoot given an xG of 0.78 xG of the StatsBomb xG 2022 model[[13]][ref13]. Accordingly, clubs should meticulously choose their penalty takers. Ideally, a player with a higher conversion ratio would be superior at finishing, possess improved shooting skills, and increase the likelihood of scoring the penalty kick.
 
 ## Penalty Takers Data Transform
 
@@ -412,7 +419,7 @@ knitr::kable(pk_taker_data[1:8, ], caption =  "First 8 rows of pk_taker data")
 
 ## Performance of Club PK Takers
 
-To visualize the performance of players who take penalty kicks and those who do not, a stacked bar plot can be used. A higher diff value suggests that the player has better shooting technique and is more likely to score goals, as it indicates that the actual goals value is greater than the expected value.
+To visualize the performance of players who take penalty kicks and those who do not, you can use a stacked bar plot. A positive difference occurs when a player's actual value is greater than their expected value, indicating that they performed better than most other players. Conversely, a negative difference occurs when a player's actual value is less than their expected value, indicating that they performed worse than others. A higher diff value suggests that the player has better shooting technique and is more likely to score goals, as it indicates that the actual goals value is greater than the expected value.
 
 ```{r stacked_barplot}
 pk_taker_data %>%
@@ -455,7 +462,7 @@ plot_data <- performance_data %>%
 
 # create heatmap data
 heatmap_data <- plot_data %>%
-  select(Points:CS90) %>%
+  select(Points:xGC90) %>%
   as.matrix()
 
 # color, green for below average, blue for above average
@@ -474,8 +481,7 @@ col_side_color <-
       "xA90",
       "xA90_diff"
     ) ~ "#ec7014",
-    attr(heatmap_data, which = "dimnames")[[2]] %in% c("CS90",
-                                                       "GC90",
+    attr(heatmap_data, which = "dimnames")[[2]] %in% c("GC90",
                                                        "xGC90",
                                                        "xGC90_diff") ~ "#737373",
     .default = "purple"
@@ -540,11 +546,6 @@ legend(
 11. [“xG, xA, xGI and xGC: What are expected stats and who are the best FPL picks?”](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/).
 12. ["LOESS (aka LOWESS)"](https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm). *nist.gov*
 13. ["What Are Expected Goals (xG)?"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
-
-
-
-98. ["TheDataDigest"](https://www.youtube.com/@TheDataDigest). *www.youtube.com*
-99. ["Equitable Equations"](https://www.youtube.com/@EquitableEquations). *www.youtube.com*
 
 [ref1]: https://en.wikipedia.org/wiki/English_football_league_system
 [ref2]: https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/

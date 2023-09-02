@@ -34,17 +34,12 @@ fpl_data <- fpl_raw_data[c(
   "minutes",
   "goals_scored",
   "expected_goals",
-  "expected_goals_per_90",
   "assists",
   "expected_assists",
-  "expected_assists_per_90",
   "goals_conceded",
   "expected_goals_conceded",
-  "expected_goals_conceded_per_90",
   "saves",
-  "saves_per_90",
-  "clean_sheets",
-  "clean_sheets_per_90"
+  "clean_sheets"
 )] %>%
   rename(all_of(
     c(
@@ -57,17 +52,12 @@ fpl_data <- fpl_raw_data[c(
       Minutes = "minutes",
       Goals = "goals_scored",
       xG = "expected_goals",
-      xG90 = "expected_goals_per_90",
       Assists = "assists",
       xA = "expected_assists",
-      xA90 = "expected_assists_per_90",
       GC = "goals_conceded",
       xGC = "expected_goals_conceded",
-      xGC90 = "expected_goals_conceded_per_90",
       Saves = "saves",
-      Saves90 = "saves_per_90",
-      CS = "clean_sheets",
-      CS90 = "clean_sheets_per_90"
+      CS = "clean_sheets"
     )
   )) %>%
   # cost is 10 times larger because it is easier to store a integer in the database
@@ -78,14 +68,14 @@ fpl_data <- fpl_raw_data[c(
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin) %>%
   # generate per 90 stats and diff stats
-  mutate(xG_diff = Goals - xG, .after = xG, ) %>%
-  mutate(xA_diff = Assists - xA, .after = xA) %>%
-  mutate(xGC_diff = GC - xGC, .after = xGC) %>%
-  mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
+  mutate(Goals90 = Goals / (Minutes / 90), .after = Goals) %>%
+  mutate(xG90 = xG / (Minutes / 90), .after = xG) %>%
   mutate(xG90_diff = Goals90 - xG90, .after = xG90) %>%
-  mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
+  mutate(Assists90 = Assists / (Minutes / 90), .after = Assists) %>%
+  mutate(xA90 = xA / (Minutes / 90), .after = xA) %>%
   mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
-  mutate(GC90 = GC / (Minutes / 90), .before = xGC90) %>%
+  mutate(GC90 = GC / (Minutes / 90), .after = GC) %>%
+  mutate(xGC90 = xGC / (Minutes / 90), .after = xGC) %>% 
   mutate(xGC90_diff = GC90 - xGC90, .after = xGC90)
 
 performance_data <- fpl_data[c(
@@ -106,13 +96,10 @@ performance_data <- fpl_data[c(
   "GC90",
   "xGC90",
   "xGC90_diff",
-  "CS90"
+  "CS"
 )] %>%
   mutate_all(~ ifelse(Minutes < 90, NA, .)) %>%
   na.omit()
-
-# remove data: fpl_raw_data to save memory
-rm(fpl_raw_data)
 
 # constant
 Positions <-  c("FWD", "MID", "DEF", "GKP")
@@ -140,7 +127,6 @@ get_radarCols <- function(Position) {
       "xGC",
       "xGC90",
       "Minutes",
-      "CS90",
       "CS",
       "Points90"
     ))
@@ -179,7 +165,7 @@ stats_minutes <- c("Minutes")
 stats_goals <- c("Goals90", "xG90", "xG90_diff")
 stats_assists <- c("Assists90", "xA90", "xA90_diff")
 stats_gc <- c("GC90", "xGC90", "xGC90_diff")
-stats_cs <- c("CC90")
+stats_cs <- c("CS")
 all_stats <-
   c(stats_points, stats_goals, stats_assists, stats_gc, stats_cs)
 
@@ -478,15 +464,22 @@ server <- function(input, output) {
     plot_data %>%
       ggplot(aes(x = Level, y = Points, fill = Position)) +
       geom_violin(alpha = .6) +
+      stat_summary(
+        fun = mean,
+        geom = "point",
+        shape = 20,
+        size = 10,
+        color = "#ec7014",
+        fill = "#ec7014"
+      ) +
       xlab("Level") +
       theme_ipsum()
   }
   
   donut <- function(plot_data) {
     # the beauty of pipeline %>%
-    aggregate(Points,
-              by = list(Position = Position),
-              data = plot_data,
+    aggregate(plot_data$Points,
+              by = list(Position = plot_data$Position),
               FUN = sum) %>%
       mutate(
         percentage = x / sum(x),
@@ -520,8 +513,8 @@ server <- function(input, output) {
   
   # shiny_scatter
   # change the value slider depends on level
-  observeEvent(input$scatterlevel, {
-    new_level <- input$scatterlevel
+  observeEvent(input$scatter_level, {
+    new_level <- input$scatter_level
     if (new_level == Levels[1]) {
       updateSliderInput(inputId = "scatter_value_range", value = c(3.7, 6.83))
     } else if (new_level == Levels[2]) {
@@ -533,8 +526,8 @@ server <- function(input, output) {
   
   output$scatter <- renderPlot({
     plot_data <- fpl_data %>%
-      filter(Points > 50) %>%
-      filter(Cost > input$scatter_value_range[1],
+      filter(Points > mean(fpl_data$Points), 
+             Cost > input$scatter_value_range[1],
              Cost <= input$scatter_value_range[2])
     
     ggplot(plot_data, aes(x = Points, y = Cost)) +
@@ -546,14 +539,14 @@ server <- function(input, output) {
       geom_text_repel(
         aes(label = Player),
         family = "Poppins",
-        size = 3,
+        size = 4,
         min.segment.length = 0,
         seed = 42,
         box.padding = 0.5,
         max.overlaps = Inf,
         nudge_x = .15,
         nudge_y = .5,
-        color = "grey50"
+        color = "grey30"
       ) +
       labs(x = "total points",
            y = "cost(m)") +
@@ -579,7 +572,7 @@ server <- function(input, output) {
         axis.title = element_text(size = 12),
         axis.ticks = element_blank(),
         # Axis lines are now lighter than default
-        axis.line = element_line(colour = "grey50"),
+        axis.line = element_line(colour = "grey30"),
         
         # Only keep y-axis major grid lines, with a grey color and dashed type.
         panel.grid.minor = element_blank(),
@@ -742,7 +735,7 @@ server <- function(input, output) {
       type == "Goals" ~ stats_goals,
       type == "Assists" ~ stats_assists,
       type == "GC" ~ stats_gc,
-      type == "CS" ~ stats_gc
+      type == "CS" ~ stats_cs
     )
   }
   
@@ -877,8 +870,8 @@ server <- function(input, output) {
   # plot for clean sheets
   cs_plot <- function(plot_data) {
     plot_data %>%
-      select(c("Cost", "CS90")) %>%
-      mutate(Value = CS90, Type = "CS90") %>%
+      select(c("Cost", "CS")) %>%
+      mutate(Value = CS90, Type = "CS") %>%
       plot()
   }
   
