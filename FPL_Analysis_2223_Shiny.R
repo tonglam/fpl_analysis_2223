@@ -484,8 +484,9 @@ server <- function(input, output) {
   
   donut <- function(plot_data) {
     # the beauty of pipeline %>%
-    aggregate(plot_data$Points,
-              by = list(Position = plot_data$Position),
+    aggregate(Points,
+              by = list(Position = Position),
+              data = plot_data,
               FUN = sum) %>%
       mutate(
         percentage = x / sum(x),

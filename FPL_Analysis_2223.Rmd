@@ -9,15 +9,15 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo=TRUE)
-knitr::opts_chunk$set(warning=FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
 ```
 
 [Video link for introducing the project's Shiny apps]()
 
 # Introduction
 
-*The Premier League (officially known as The Football Association Premier League Limited)* [[1]][ref1] is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. *The Fantasy Premier League (FPL)* is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023. [[2]][ref2] The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League. [[3]][ref3]
+*The Premier League (officially known as The Football Association Premier League Limited)* [[1]][ref1] is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. *The Fantasy Premier League (FPL)* is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023 [[2]][ref2]. The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League. [[3]][ref3]
 
 The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. [[4]][ref4] It is a basic dataset containing the aggregated fantasy premier league data taken from *the official website Fantasy Premier League* [[5]][ref5]. In Fantasy Premier League, players create a fictional team composed of real-life football players and earn points based on their performance statistics or perceived on-field contributions. [[6]][ref6]
 
@@ -29,14 +29,8 @@ Load necessary libraries for the project.
 
 ```{r library, message=FALSE}
 library(tidyverse)
-library(shiny)
-library(htmltools)
-library(fmsb)
-library(RColorBrewer)
-library(hrbrthemes)
 library(viridis)
-library(ggrepel)
-library(grid)
+library(hrbrthemes)
 library(gridExtra)
 ```
 
@@ -106,10 +100,9 @@ fpl_data <- fpl_raw_data[c(
   "goals_conceded",
   "expected_goals_conceded",
   "expected_goals_conceded_per_90",
-  "saves",
-  "saves_per_90",
   "clean_sheets",
-  "clean_sheets_per_90"
+  "clean_sheets_per_90",
+  "penalties_order"
 )] %>%
   rename(all_of(
     c(
@@ -129,10 +122,9 @@ fpl_data <- fpl_raw_data[c(
       GC = "goals_conceded",
       xGC = "expected_goals_conceded",
       xGC90 = "expected_goals_conceded_per_90",
-      Saves = "saves",
-      Saves90 = "saves_per_90",
       CS = "clean_sheets",
-      CS90 = "clean_sheets_per_90"
+      CS90 = "clean_sheets_per_90",
+      PK_Taker = "penalties_order"
     )
   )) %>%
   # cost is 10 times larger because it is easier to store a integer in the database
@@ -143,18 +135,11 @@ fpl_data <- fpl_raw_data[c(
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin)
 
-# remove data: fpl_raw_data to save memory
-rm(fpl_raw_data)
-
-# show the table(first six rows)
-knitr::kable(fpl_data[1:5,], caption =  "First 5 rows of fpl_data")
-```
-
-```{r transform_2, include=FALSE}
+# create constant
 Positions <-  c("FWD", "MID", "DEF", "GKP")
-Levels <- unique(fpl_data$Level)
-Clubs <- unique(fpl_data$Club)
-Costs <- seq(from = 4, to = 13.5, by = 0.5)
+
+# show the table(first five rows)
+knitr::kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl_data")
 ```
 
 # Exploring Points Distribution
@@ -228,31 +213,29 @@ The horizontal barplot confirms our observations that the top 6 players, all of 
 
 ## Points, Positions and Values
 
-```{r boxplot}
+```{r horizonal_violin}
 fpl_data %>%
-      ggplot(aes(x = Level, y = Points, fill = Position)) +
-      geom_boxplot() +
-      stat_summary(
-        fun = mean,
-        geom = "point",
-        shape = 20,
-        size = 10,
-        color = "#ec7014",
-        fill = "#ec7014"
-      ) +
-      scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
-      geom_jitter(color = "black",
-                  size = 0.4,
-                  alpha = 0.9) +
-      ylim(0, 300) +
-      xlab("Level") +
-      ggtitle("Total points distribution across different levels") + 
-      theme_ipsum()
+  ggplot(aes(x = Level, y = Points, fill = Position)) +
+  geom_violin() +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 20,
+    size = 10,
+    color = "#ec7014",
+    fill = "#ec7014"
+  ) +
+  scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+  coord_flip() +
+  ylim(0, 300) +
+  xlab("Level") +
+  ggtitle("Total points distribution across different levels") +
+  theme_ipsum()
 ```
 
 It is easy to support all of the observations mentioned below by using the shiny app of this project to explore the FPL data for the 2022-23 season.
 
-Based on the distribution of different levels across various positions, we can draw some observations from the Shiny app. Goalkeepers have the lowest average cost among all positions. However, the boxplot indicates that there are more outlines for GKP than for any other position. This implies that while we spend less on GKP, they may have a higher chance of providing a better reward.
+Based on the distribution of different levels across various positions, we can draw some observations from the Shiny app. Goalkeepers have the lowest average cost among all positions. However, the boxplot indicates that there are more outliers for GKP than for any other position. This implies that while we spend less on GKP, they may have a higher chance of providing a better reward.
 
 It can be observed that higher level players score a higher mean of points, indicating a positive correlation between overall cost and total points. The fact that all top level players are forwards and midfielders may contribute to this trend, as they have the most attacking resources available to help them score or assist a goal, resulting in a higher number of FPL points.
 
@@ -260,30 +243,20 @@ It can be observed that higher level players score a higher mean of points, indi
 
 In this sector, we aim to explore both the actual and expected values of players.
 
-## Further Transform
+## Per 90 Data Transform
 
 In the next stage, we will try to determine why an elite player can score more points. One way to explore this is to use expected values such as *expected goals (xG)* [[9]][ref9], *expected assists (xA)* [[10]][ref10], and *expected goals conceded (xGC)* [[11]][ref11]. Fortunately, all of this data is included in the original dataset.
 
 As players have varying playing times, it is inaccurate to use actual or expected values directly. Therefore, we will introduce per 90 statistics, which represent values per 90 minutes of play. We will transform Points, Goals, xG, Assists, xA, GoalsConcede, xGC, and Cleansheets into Points per 90, Goals per 90, xG per 90, Assists per 90, xA per 90, GoalsConcede per 90, xGC per 90, and Cleansheets per 90. 
 
-We can also measure how well a player performs by calculating their "diff value," which is based on the difference between their actual performance and their expected performance.
-
-```{r transform_3, results='hide'}
-# fpl_data_diff, the next column is based on the result of the last column
-# use mutate one time for one column here
+```{r transform_2, results='hide'}
 fpl_data <- fpl_data %>%
-  mutate(xG_diff = Goals - xG, .after = xG,) %>% 
-  mutate(xA_diff = Assists - xA, .after = xA) %>%
-  mutate(xGC_diff = GC - xGC, .after = xGC) %>%
   mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
-  mutate(xG90_diff = Goals90 - xG90, .after = xG90) %>%
   mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
-  mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
-  mutate(GC90 = GC / (Minutes / 90), .before = xGC90) %>%
-  mutate(xGC90_diff = GC90 - xGC90, .after = xGC90)
+  mutate(GC90 = GC / (Minutes / 90), .before = xGC90)
 
 # new data table
-knitr::kable(fpl_data[1:5, ], caption = "first 5 rows of fpl_data after adding diff and avg_90 data")
+knitr::kable(fpl_data[1:5,], caption = "First 5 rows of fpl_data adding per 90")
 
 # count missing values
 missing_values <- apply(is.na(fpl_data), 2, sum)
@@ -291,12 +264,11 @@ na_values <- which(missing_values > 0)
 # if actual value and expected value are all 0, then the actual value 90 and expected value 90 will be NaN
 # if min > 0, give it an average value, others it is 0
 #  expected90 values NaN means the player did not play a single minute, make it NA
-  fpl_data$Goals90 <- ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
-  fpl_data$Assists90 <- ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
-  fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
-  fpl_data$xG90_diff <- fpl_data$Goals90 - fpl_data$xG90
-  fpl_data$xA90_diff <- fpl_data$Assists90 - fpl_data$xA90
-  fpl_data$xGC90_diff <- fpl_data$GC90 - fpl_data$xGC90
+fpl_data$Goals90 <-
+  ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
+fpl_data$Assists90 <-
+  ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
+fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
 # look at the missing values again, it is clean
 missing_values <- apply(is.na(fpl_data), 2, sum)
 
@@ -307,17 +279,17 @@ performance_data <- fpl_data[c(
   "Level",
   "Cost",
   "Points",
+  "Goals",
+  "Assists",
+  "GC",
   "Minutes",
   "Points90",
   "Goals90",
   "xG90",
-  "xG90_diff",
   "Assists90",
   "xA90",
-  "xA90_diff",
   "GC90",
   "xGC90",
-  "xGC90_diff",
   "CS90"
 )]
 ```
@@ -326,124 +298,149 @@ performance_data <- fpl_data[c(
 
 Let's begin by examining the distribution of actual per 90 values. The horizontal violin chart allows us to observe that there are outliers present in the actual values that deviate significantly from the others.
 
-```{r horizontal_violin}
+```{r boxplot}
 # create a new data frame for plot[Cost, Value, Type], which is not a tidy data
 # reshape data here, use provide_long() to create a tidy data
-performance_data[c(
-  "Minutes",
-  "Points90",
-  "Goals90",
-  "Assists90",
-  "GC90",
-  "CS90"
-)] %>%
+performance_data[c("Minutes",
+                   "Points90",
+                   "Goals90",
+                   "Assists90",
+                   "GC90",
+                   "CS90")] %>%
   pivot_longer (2:6, names_to = "Per90", values_to = "Value") %>%
-  ggplot(aes(x = Per90, y = Value, fill = Per90, color = Per90)) +
-  geom_violin(width = 1, size = 0.2) +
+  ggplot(aes(
+    x = Per90,
+    y = Value,
+    fill = Per90,
+    color = Per90
+  )) +
+  geom_boxplot() +
   scale_fill_viridis(discrete = T) +
   scale_color_viridis(discrete = T) +
-  theme_ipsum() + 
-  ggtitle("Distribution of per 90 Values") + 
-  xlab("") + 
+  geom_jitter(alpha = .5, size = 1) +
+  ggtitle("Distribution of per 90 Values") +
+  xlab("") +
   ylab("Actual Value per 90") +
-  coord_flip() + 
-  geom_jitter(alpha = .5, size = 1)
+  theme_ipsum() +
+  theme(legend.title = element_blank())
 ```
 
 When calculating the per 90 values, it is important to consider that a player who has not played a total of 90 minutes in a season will have extremely high per 90 values. Therefore, it is necessary to exclude these values as they are invalid.
 
-```{r transform_4}
-performance_data <- performance_data %>% 
-  mutate_all(~ifelse(Minutes < 90, NA, .)) %>% 
+```{r transform_3}
+performance_data <- performance_data %>%
+  mutate_all( ~ ifelse(Minutes < 90, NA, .)) %>%
   na.omit()
 ```
 
 ## Players' Performance
 
-```{r grid_extra}
-# plot for points
-points_plot <- function(plot_data) {
-  plot_data %>%
-    select(c("Cost", "Points90")) %>%
-    mutate(Value = Points90, Type = "Points90") %>%
-    plot()
-}
+For observing the correlation between a player's cost and their performance, we can focus on regular players who have played more than 90 minutes and scored at least one goal or provided at least one assist for an entire season. These regular players are the foundation of every club's attacking performance. We can use a scatter plot with the `geom_smooth()` function to observe any possible correlation. For a small dataset, we will use *LOESS* method to fit the smooth curve. [[12]][ref12]
 
-# plot for minutes
-minutes_plot <- function(plot_data) {
-  plot_data %>%
-    select(c("Cost", "Minutes")) %>%
-    mutate(Value = Minutes, Type = "Minutes") %>%
-    plot()
-}
+To prepare for visualization, it is necessary to perform some data transformations. Two new data frames can be created: one named "goals_performance" which combines the players' Goals90 and xG90, and another named "assists_performance" which combines the players' assist data. For defenders, a "goalsConcede_performance" can be created to observe their actual performance versus expected performance.
 
-# plot for goals
-goals_plot <- function(plot_data) {
-  plot_data %>%
-    select(c("Cost", "Goals90", "xG90", "xG90_diff")) %>%
-    pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
-    plot()
-}
+```{r grid_scatter_smooth, fig.height=7, fig.width=10}
+# goals performance
+p1 <- performance_data %>%
+  filter(Goals > 1 & Minutes > 1000) %>%
+  filter(Position %in% c("FWD", "MID")) %>%
+  pivot_longer (12:13, names_to = "Performance", values_to = "Value") %>%
+  select(c("Cost", "Performance", "Value")) %>%
+  ggplot(aes(x = Cost, y = Value, color = Performance)) +
+  geom_point() +
+  geom_smooth(method = loess) +
+  ylab("Per 90") +
+  labs(color = "Attackers") +
+  theme_ipsum()
 
-# plot for assists
-assists_plot <- function(plot_data) {
-  plot_data %>%
-    select(c("Cost", "Assists90", "xA90", "xA90_diff")) %>%
-    pivot_longer (2:4, names_to = "Type", values_to = "Value") %>%
-    plot()
-}
+# assists performance
+p2 <- performance_data %>%
+  filter(Assists > 1 & Minutes > 1000) %>%
+  filter(Position %in% c("FWD", "MID")) %>%
+  pivot_longer (14:15, names_to = "Performance", values_to = "Value") %>%
+  select(c("Cost", "Performance", "Value")) %>%
+  ggplot(aes(x = Cost, y = Value, color = Performance)) +
+  geom_point() +
+  geom_smooth(method = loess) +
+  ylab("Per 90") +
+  labs(color = "Attackers") +
+  theme_ipsum()
 
-# plot line chart
-plot <- function(data) {
-  data %>%
-    ggplot(aes(
-      x = Cost,
-      y = Value,
-      group = Type,
-      color = Type
-    )) +
-    geom_line() +
-    scale_color_viridis(discrete = TRUE) +
-    xlab("Cost(m)") +
-    ylab("") +
-    theme_ipsum() +
-    theme(legend.title = element_blank())
-}
+# goalsConcede performance
+p3 <- performance_data %>%
+  filter(GC > 1 & Minutes > 1000) %>%
+  filter(Position %in% c("DEF", "GKP")) %>%
+  pivot_longer (16:17, names_to = "Performance", values_to = "Value") %>%
+  select(c("Cost", "Performance", "Value")) %>%
+  ggplot(aes(x = Cost, y = Value, color = Performance)) +
+  geom_point() +
+  geom_smooth(method = loess) +
+  ylab("Per 90") +
+  labs(color = "Defenders") +
+  theme_ipsum()
 
-plot_data <- performance_data %>% 
-  filter(Cost > 8, Cost < 14)
-
-p1 <- points_plot(plot_data)
-p2 <- minutes_plot(plot_data)
-p3 <- goals_plot(plot_data)
-p4 <- assists_plot(plot_data)
-
-grid.arrange(p1, p2, p3, p4, ncol = 2)
-
+suppressMessages({
+  grid.arrange(p1, p2, p3, ncol = 2)
+})
 ```
 
+By examining the first row of the grid plot, we can observe the performance of attackers (forwards and midfielders) who played regular minutes in terms of Goals and Assists. The results indicate that as the cost of players increases from low to premium level, their attacking performance also improves. This suggests that highly-priced players have a higher conversion ratio and are more skilled at finishing or assisting compared to other players. Therefore, investing in premium players could lead to greater rewards and is a recommended strategy when playing FPL.
 
+In the second row, we can see how defenders and goalkeepers perform in terms of goals conceded. The chart shows that the actual and expected values are nearly the same across all levels of players. This implies that investing heavily in defenders may not yield significantly better results than investing in low level ones. This may be because defense is a team effort, and having a couple of elite players may not make a significant difference in the outcome.
 
-## Penalty Takers
+# Explore Club's Penalty Takers
 
+Penalties are the most probable opportunities to score during a football match, with each penalty shoot given an xG of 0.78 xG of the StatsBomb xG 2022 model[[]][]. Accordingly, clubs should meticulously choose their penalty takers. Ideally, a player with a higher conversion ratio would be superior at finishing, possess improved shooting skills, and increase the likelihood of scoring the penalty kick.
 
-Lollipop chart
+## Penalty Takers Data Transform
 
+Before analyzing the data on penalty takers, we must first make some data transformations. The original dataset, penalty order, treats players who are not among the first three in their club's penalty taking order as missing values. To address this, we can split the players in each club into two groups: penalty takers(pk taker) and non-penalty takers(non pk taker). We can then calculate the goal performance for both groups.
 
+```{r transform_4}
+# check NA
+sum(is.na(fpl_data$PK_Taker))
+# divide players into two categories, penalty takers and non-penalty takers
+# change numerical values to logical values
+pk_taker_data <- fpl_data %>%
+  select(c("Player", "Club", "Goals90", "xG90", "PK_Taker")) %>%
+  mutate(PK_Taker = ifelse(is.na(PK_Taker), FALSE, TRUE))
+# grouped by pk_taker, observe the goals performance
+# use a FUN = mean here, because each group may contains different number of players
+pk_taker_data <-
+  aggregate(cbind(Goals90, xG90) ~ Club + PK_Taker,
+            data = pk_taker_data,
+            FUN = mean) %>%
+  # calculate the different between Goals90 and xG90
+  mutate(Diff90 = Goals90 - xG90) %>%
+  arrange(Club, PK_Taker)
 
+# show the table(first eight rows)
+knitr::kable(pk_taker_data[1:8, ], caption =  "First 8 rows of pk_taker data")
+```
 
+## Performance of Club PK Takers
 
+To visualize the performance of players who take penalty kicks and those who do not, a stacked bar plot can be used. A higher diff value suggests that the player has better shooting technique and is more likely to score goals, as it indicates that the actual goals value is greater than the expected value.
 
-high value(premium) players have a higher conver rate, are closer to the expected values
+```{r stacked_barplot}
+pk_taker_data %>%
+  ggplot(aes(x = Club, y = Diff90, fill = PK_Taker)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_viridis(
+    discrete = TRUE,
+    alpha = 0.6,
+    begin = 0.4,
+    end = 0.8,
+    labels = c("No", "Yes"),
+    name = "PK Takers"
+  ) +
+  xlab("") +
+  ggtitle("Comparison of PK and non-PK takers' performance") +
+  theme_ipsum() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
-data_transform, divide players by group, step = 1
-
-will club make a high xG coverted rate player to be a pk taker?
-
-Let take a look at the per 90 values.
-
-Outlier should be players play less than 90, so their per90 values are extremely high. Transfer these data into NA, because when we are trying to analyse the performance of players by using the per90 data, these players who played less than 90 mins make no sense.
-
+Based on the plot, it is clear that the majority of clubs made wise choices when selecting their penalty takers, as the performance of those who took penalties resulted in more goals than those who did not. Nevertheless, there is room for improvement for Arsenal, Leicester, and Liverpool, particularly Arsenal, which may need to reconsider their choice of penalty takers.
 
 # Conclusion
 
@@ -485,12 +482,10 @@ col_side_color <-
       "xA90",
       "xA90_diff"
     ) ~ "#ec7014",
-    attr(heatmap_data, which = "dimnames")[[2]] %in% c(
-      "CS90", 
-      "GC90", 
-      "xGC90", 
-      "xGC90_diff"
-    ) ~ "#737373",
+    attr(heatmap_data, which = "dimnames")[[2]] %in% c("CS90",
+                                                       "GC90",
+                                                       "xGC90",
+                                                       "xGC90_diff") ~ "#737373",
     .default = "purple"
   )
 
@@ -521,8 +516,8 @@ legend(
     "Average",
     "Below Average"
   ),
-  cex = 0.6,
-  pt.cex = 1,
+  cex = 0.7,
+  # pt.cex = 1.2,
   fill = c(
     "#7fc97f",
     "#386cb0",
@@ -551,6 +546,8 @@ legend(
 9. ["expected-goals-xg-explained"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
 10. ["what-are-expected-assists-xa"](https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/). *theanalyst.com*
 11. [“xG, xA, xGI and xGC: What are expected stats and who are the best FPL picks?”](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/).
+12. ["LOESS (aka LOWESS)"](https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm). *nist.gov*
+13. ["What Are Expected Goals (xG)?"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
 
 
 
@@ -568,4 +565,6 @@ legend(
 [ref9]: https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/
 [ref10]: https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/
 [ref11]: https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/
+[ref12]: https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm
+[ref13]: https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/
 
