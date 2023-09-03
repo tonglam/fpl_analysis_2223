@@ -1,3 +1,13 @@
+# install.packages("tidyverse")
+# install.packages("shiny")
+# install.packages("htmltools")
+# install.packages("fmsb")
+# install.packages("RColorBrewer")
+# install.packages("hrbrthemes")
+# install.packages("viridis")
+# install.packages("ggrepel")
+# install.packages("gridExtra")
+
 library(tidyverse)
 library(shiny)
 library(htmltools)
@@ -75,8 +85,18 @@ fpl_data <- fpl_raw_data[c(
   mutate(xA90 = xA / (Minutes / 90), .after = xA) %>%
   mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
   mutate(GC90 = GC / (Minutes / 90), .after = GC) %>%
-  mutate(xGC90 = xGC / (Minutes / 90), .after = xGC) %>% 
+  mutate(xGC90 = xGC / (Minutes / 90), .after = xGC) %>%
   mutate(xGC90_diff = GC90 - xGC90, .after = xGC90)
+
+# replace NaN with NA
+fpl_data$Goals90 <-
+  ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
+fpl_data$xG90 <- ifelse(is.na(fpl_data$xG90), 0, fpl_data$xG90)
+fpl_data$Assists90 <-
+  ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
+fpl_data$xA90 <- ifelse(is.na(fpl_data$xA90), 0, fpl_data$xA90)
+fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
+fpl_data$xGC90 <- ifelse(is.na(fpl_data$xGC90), 0, fpl_data$xGC90)
 
 performance_data <- fpl_data[c(
   "Player",
@@ -98,12 +118,12 @@ performance_data <- fpl_data[c(
   "xGC90_diff",
   "CS"
 )] %>%
-  mutate_all(~ ifelse(Minutes < 90, NA, .)) %>%
+  mutate_all( ~ ifelse(Minutes < 90, NA, .)) %>%
   na.omit()
 
 # constant
 Positions <-  c("FWD", "MID", "DEF", "GKP")
-Levels <- unique(fpl_data$Level)
+Levels <- c(unique(fpl_data$Level), "Custom")
 Clubs <- unique(fpl_data$Club)
 Costs <- seq(from = 4, to = 13.5, by = 0.5)
 
@@ -121,15 +141,13 @@ get_radarCols <- function(Position) {
       "Goals"
     ))
   } else if (Position == 'DEF') {
-    return (c(
-      "Points",
-      "GC",
-      "xGC",
-      "xGC90",
-      "Minutes",
-      "CS",
-      "Points90"
-    ))
+    return (c("Points",
+              "GC",
+              "xGC",
+              "xGC90",
+              "Minutes",
+              "CS",
+              "Points90"))
   } else{
     return (c(
       "Points",
@@ -250,7 +268,7 @@ ui <-
            }"
             )
           )),
-          div(class = "title", "Compare Player Points by Level or Value"),
+          div(class = "title", "Compare Player Points by Value"),
           
           sidebarLayout(
             sidebarPanel(
@@ -258,7 +276,7 @@ ui <-
                 "scatter_level",
                 "Level",
                 choices = Levels,
-                selected = Levels[2]
+                selected = Levels[4]
               ),
               
               sliderInput(
@@ -512,6 +530,7 @@ server <- function(input, output) {
   }
   
   # shiny_scatter
+  
   # change the value slider depends on level
   observeEvent(input$scatter_level, {
     new_level <- input$scatter_level
@@ -519,16 +538,20 @@ server <- function(input, output) {
       updateSliderInput(inputId = "scatter_value_range", value = c(3.7, 6.83))
     } else if (new_level == Levels[2]) {
       updateSliderInput(inputId = "scatter_value_range", value = c(6.83, 9.97))
-    } else {
+    } else if (new_level == Levels[3]) {
       updateSliderInput(inputId = "scatter_value_range", value = c(9.97, 13.1))
+    } else{
+      updateSliderInput(inputId = "scatter_value_range", value = c(6, 11))
     }
   })
   
   output$scatter <- renderPlot({
     plot_data <- fpl_data %>%
-      filter(Points > mean(fpl_data$Points), 
-             Cost > input$scatter_value_range[1],
-             Cost <= input$scatter_value_range[2])
+      filter(
+        Points > mean(fpl_data$Points),
+        Cost > input$scatter_value_range[1],
+        Cost <= input$scatter_value_range[2]
+      )
     
     ggplot(plot_data, aes(x = Points, y = Cost)) +
       geom_point(aes(color = Position, shape = Position),
@@ -551,36 +574,29 @@ server <- function(input, output) {
       labs(x = "total points",
            y = "cost(m)") +
       theme(
-        # The default font when not explicitly specified
         text = element_text(
           family = "Lobster Two",
           size = 8,
           color = "black"
         ),
         
-        # Customize legend text, position, and background.
         legend.text = element_text(size = 9, family = "Roboto"),
         legend.position = c(1, 0.85),
         legend.justification = c(1, 0),
         legend.background = element_blank(),
-        # This one removes the background behind each key in the legend
         legend.key = element_blank(),
         legend.title = element_blank(),
         
-        # Adjust axis parameters such as size and color.
         axis.text = element_text(size = 10, color = "black"),
         axis.title = element_text(size = 12),
         axis.ticks = element_blank(),
-        # Axis lines are now lighter than default
         axis.line = element_line(colour = "grey30"),
         
-        # Only keep y-axis major grid lines, with a grey color and dashed type.
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),
         panel.grid.major.y = element_line(color = "#b4aea9", linetype =
                                             "dashed"),
         
-        # Use a light color for the background of the plot and the panel.
         panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
         plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")
       )
@@ -659,7 +675,9 @@ server <- function(input, output) {
   
   output$radar_plot <- renderPlot({
     radarCols <- get_radarCols(input$radar_position1)
+    
     plot_data <- radar_data_filter()
+    
     plot_data <-
       rbind(c(
         max(fpl_data[radarCols[1]]),
@@ -674,7 +692,6 @@ server <- function(input, output) {
       rep(0, 8),
       plot_data)
     
-    # color vector
     colors_border = c(rgb(0.2, 0.5, 0.5, 0.9),
                       rgb(0.8, 0.2, 0.5, 0.9),
                       rgb(0.7, 0.5, 0.1, 0.9))
@@ -683,26 +700,21 @@ server <- function(input, output) {
                   rgb(0.8, 0.2, 0.5, 0.4),
                   rgb(0.7, 0.5, 0.1, 0.4))
     
-    # plot with default options:
     radarchart(
       plot_data,
       axistype = 1 ,
-      #custom polygon
-      pcol = colors_border ,
+      pcol = colors_border,
       pfcol = colors_in ,
       plwd = 4 ,
       plty = 1,
-      #custom the grid
       cglcol = "grey",
       cglty = 1,
       axislabcol = "grey",
       caxislabels = seq(0, 20, 5),
       cglwd = 0.8,
-      #custom labels
       vlcex = 0.8
     )
     
-    # add a legend
     legend(
       x = 1.2,
       y = 1,
@@ -757,8 +769,10 @@ server <- function(input, output) {
       updateSliderInput(inputId = "grid_value_range", value = c(3.7, 6.83))
     } else if (new_level == Levels[2]) {
       updateSliderInput(inputId = "grid_value_range", value = c(6.83, 9.97))
-    } else {
+    } else if (new_level == Levels[3]) {
       updateSliderInput(inputId = "grid_value_range", value = c(9.97, 13.1))
+    } else {
+      updateSliderInput(inputId = "grid_value_range", value = c(6, 11))
     }
   })
   
@@ -871,7 +885,7 @@ server <- function(input, output) {
   cs_plot <- function(plot_data) {
     plot_data %>%
       select(c("Cost", "CS")) %>%
-      mutate(Value = CS90, Type = "CS") %>%
+      mutate(Value = CS, Type = "CS") %>%
       plot()
   }
   
