@@ -18,6 +18,9 @@ library(viridis)
 library(ggrepel)
 library(gridExtra)
 
+# Video for the project's Shiny app: https://www.youtube.com/watch?v=kBFBLArgKTA&ab_channel=TongLam
+
+
 # load data
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
@@ -44,12 +47,17 @@ fpl_data <- fpl_raw_data[c(
   "minutes",
   "goals_scored",
   "expected_goals",
+  "expected_goals_per_90",
   "assists",
   "expected_assists",
+  "expected_assists_per_90",
   "goals_conceded",
   "expected_goals_conceded",
+  "expected_goals_conceded_per_90",
   "saves",
-  "clean_sheets"
+  "saves_per_90",
+  "clean_sheets",
+  "clean_sheets_per_90"
 )] %>%
   rename(all_of(
     c(
@@ -62,12 +70,17 @@ fpl_data <- fpl_raw_data[c(
       Minutes = "minutes",
       Goals = "goals_scored",
       xG = "expected_goals",
+      xG90 = "expected_goals_per_90",
       Assists = "assists",
       xA = "expected_assists",
+      xA90 = "expected_assists_per_90",
       GC = "goals_conceded",
-      xGC = "expected_goals_conceded",
+      xGc = "expected_goals_conceded",
+      xGc90 = "expected_goals_conceded_per_90",
       Saves = "saves",
-      CS = "clean_sheets"
+      Saves90 = "saves_per_90",
+      CS = "clean_sheets",
+      CS90 = "clean_sheets_per_90"
     )
   )) %>%
   # cost is 10 times larger because it is easier to store a integer in the database
@@ -78,25 +91,15 @@ fpl_data <- fpl_raw_data[c(
   # category player level by their values
   mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin) %>%
   # generate per 90 stats and diff stats
-  mutate(Goals90 = Goals / (Minutes / 90), .after = Goals) %>%
-  mutate(xG90 = xG / (Minutes / 90), .after = xG) %>%
+  mutate(xG_diff = Goals - xG, .after = xG,) %>%
+  mutate(xA_diff = Assists - xA, .after = xA) %>%
+  mutate(xGc_diff = GC - xGc, .after = xGc) %>%
+  mutate(Goals90 = Goals / (Minutes / 90), .before = xG90) %>%
   mutate(xG90_diff = Goals90 - xG90, .after = xG90) %>%
-  mutate(Assists90 = Assists / (Minutes / 90), .after = Assists) %>%
-  mutate(xA90 = xA / (Minutes / 90), .after = xA) %>%
+  mutate(Assists90 = Assists / (Minutes / 90), .before = xA90) %>%
   mutate(xA90_diff = Assists90 - xA90, .after = xA90) %>%
-  mutate(GC90 = GC / (Minutes / 90), .after = GC) %>%
-  mutate(xGC90 = xGC / (Minutes / 90), .after = xGC) %>%
-  mutate(xGC90_diff = GC90 - xGC90, .after = xGC90)
-
-# replace NaN with NA
-fpl_data$Goals90 <-
-  ifelse(is.na(fpl_data$Goals90), 0, fpl_data$Goals90)
-fpl_data$xG90 <- ifelse(is.na(fpl_data$xG90), 0, fpl_data$xG90)
-fpl_data$Assists90 <-
-  ifelse(is.na(fpl_data$Assists90), 0, fpl_data$Assists90)
-fpl_data$xA90 <- ifelse(is.na(fpl_data$xA90), 0, fpl_data$xA90)
-fpl_data$GC90 <- ifelse(is.na(fpl_data$GC90), 0, fpl_data$GC90)
-fpl_data$xGC90 <- ifelse(is.na(fpl_data$xGC90), 0, fpl_data$xGC90)
+  mutate(GC90 = GC / (Minutes / 90), .before = xGc90) %>%
+  mutate(xGc90_diff = GC90 - xGc90, .after = xGc90)
 
 performance_data <- fpl_data[c(
   "Player",
@@ -114,9 +117,9 @@ performance_data <- fpl_data[c(
   "xA90",
   "xA90_diff",
   "GC90",
-  "xGC90",
-  "xGC90_diff",
-  "CS"
+  "xGc90",
+  "xGc90_diff",
+  "CS90"
 )] %>%
   mutate_all( ~ ifelse(Minutes < 90, NA, .)) %>%
   na.omit()
@@ -141,19 +144,22 @@ get_radarCols <- function(Position) {
       "Goals"
     ))
   } else if (Position == 'DEF') {
-    return (c("Points",
-              "GC",
-              "xGC",
-              "xGC90",
-              "Minutes",
-              "CS",
-              "Points90"))
+    return (c(
+      "Points",
+      "GC",
+      "xGc",
+      "xGc90",
+      "Minutes",
+      "CS90",
+      "CS",
+      "Points90"
+    ))
   } else{
     return (c(
       "Points",
       "GC",
-      "xGC",
-      "xGC90",
+      "xGc",
+      "xGc90",
       "Minutes",
       "Saves90",
       "Saves",
@@ -161,6 +167,7 @@ get_radarCols <- function(Position) {
     ))
   }
 }
+
 
 # type checkbox choices
 type_choices <- max(performance_data$Goals)
@@ -190,7 +197,7 @@ all_stats <-
 # ui
 ui <-
   navbarPage(
-    "FPL Data Explore",
+    "Exploratory 2022-2023 Season FPL Data",
     
     tabPanel(
       "Points Distribution",
@@ -734,7 +741,7 @@ server <- function(input, output) {
         Player = c(input$radar_player1, input$radar_player2),
         .before = Points
       ) %>%
-      mutate(Player = c(input$radar_value1, input$radar_value2),
+      mutate(Costs = c(input$radar_value1, input$radar_value2),
              .after = Player)
   })
   

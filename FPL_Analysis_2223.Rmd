@@ -1,11 +1,10 @@
 ---
-title: "CITS4009 - Project 1"
-author: "Tong Lan (24056082)"
+title: "FPL_Analysis_22-23"
+author: "Tong"
 date: "`r Sys.Date()`"
-output: 
-  html_document: 
+output:
+  html_document:
     code_folding: show
-runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -13,19 +12,17 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(warning = FALSE)
 ```
 
-[Video for the project's Shiny app]()
-
 # Introduction
 
-*The Premier League (officially known as The Football Association Premier League Limited)* [[1]](https://en.wikipedia.org/wiki/English_football_league_system) is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other, with each team playing 38 matches, resulting in a total of 380 matches every season. *The Fantasy Premier League (FPL)* is the official fantasy football game of the English Premier League. It is the largest fantasy football game, with over 11.5 million players in 2023 [[2]](https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/). The game was created by ISM (International Sports Multimedia) and is owned and operated by the Premier League. [[3]](https://en.wikipedia.org/wiki/Fantasy_Premier_League)
+*The Premier League(officially known as The Football Association Premier League Limited)* [[1]](https://en.wikipedia.org/wiki/English_football_league_system) is the highest level of professional football in the English football league system. There are twenty clubs that compete against each other every season, playing in a total of 380 matches every year. *The Fantasy Premier League (FPL)* is the official fantasy football game of the English Premier League, with over 11.5 million players in 2023 [[2]](https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/).
 
-The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. [[4]](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023) It is a basic dataset containing the aggregated fantasy premier league data taken from *the official website Fantasy Premier League* [[5]](https://fantasy.premierleague.com/). In FPL, players create a fictional team composed of real-life football players and earn points based on their performance statistics or perceived on-field contributions. [[6]](https://en.wikipedia.org/wiki/Fantasy_football_(association))
+The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. [[3]](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023) It is a basic dataset containing the aggregated fantasy premier league data taken from *the official website Fantasy Premier League* [[4]](https://fantasy.premierleague.com/). In FPL, players create a fictional team composed of real-life football players and earn points based on their performance statistics or perceived on-field contributions. [[5]](https://en.wikipedia.org/wiki/Fantasy_football_(association))
 
-Using the 2022-23 season FPL data, this project aims to explore player performance statistics and their correlation to total points. Through EDA, ETL, and visualization, we will observe and analyze the results, with the goal of identifying better strategies for playing FPL.
+This project aims to explore player performance statistics and their correlation to total points using EDA, ETL, and visualization. We will observe and analyze the results and try to identify better strategies for playing FPL.
 
 # Data Preparation
 
-Load necessary libraries for the project.
+Load necessary libraries.
 
 ```{r library, message=FALSE}
 # install.packages("tidyverse")
@@ -39,7 +36,7 @@ library(hrbrthemes)
 library(gridExtra)
 ```
 
-Load the dataset from a CSV file for the project.
+Load the dataset from a CSV file.
 
 ```{r data_file, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
@@ -50,7 +47,7 @@ fpl_raw_data <- read.csv(path)
 
 ## Overview Data
 
-To begin, we need to review the input dataset. We can do this by using the `glimpse()` function to get a general overview of the raw data, followed by using the `str()` function to examine the dataset structure. Next, we can use the `summary()` function to get a summary of the dataset. Finally, we can use the `head()` function to take a look at the first six lines of the dataset.
+To begin, we need to review the input dataset. We can do this by using the `glimpse()` function to get a general overview of the raw data. Next, we can use the `str()` function to examine the dataset structure. Then, we can use the `summary()` function to get a summary of the dataset. Finally, we can use the `head()` function to take a look at the first six lines of the dataset.
 
 ```{r glimpse, results='hide'}
 glimpse(fpl_raw_data)
@@ -63,19 +60,19 @@ The `glimpse()` function and `str()` function show that the dataset has 778 rows
 summary(fpl_raw_data)
 ```
 
-The `summary()` function indicates that each row in the dataset represents a player, resulting in a total of 778 players for the 2022-23 season. The total point for each player ranges from 0 to 272, with an average of 40.78. The cost for each player ranges from 37 to 131, with a median of 45. According to the rule from the official FPL website [[5]](https://fantasy.premierleague.com/), a player's value should be between 3.0 and 14.0, and the total budget for 15 selected players is 100. We can note that the cost values are 10 times larger for easier storage in the database. The cost values might be a useful statistic to explore further.
+The `summary()` function shows that each row in the dataset represents a player, resulting in a total of 778 players for the 2022-23 season. The total point for each player ranges from 0 to 272, with an average of 40.78. The cost for each player ranges from 37 to 131, with a median of 45. According to the rule from the official FPL website [[6]](https://fantasy.premierleague.com/), a player's value should be between 3.0 and 14.0, and the total budget for 15 selected players is 100. We can assume that the cost values are 10 times larger for easier storage in the database. The cost values might be a useful statistic to explore further.
 
 ```{r head, results='hide'}
 head(fpl_raw_data)
 ```
 
-Using the `head()` function, we can view the default first 6 rows, which contain various details such as the number of goals, assists, and other statistics for each player.
+Using the `head()` function, we can view the default first 6 rows. Each row contains various details such as goals, assists, and other statistics.
 
 ## Initial Transform
 
-Before starting our exploratory data analysis, we should perform an initial transformation to make the dataset more suitable for further use. As discussed earlier, player costs range from 3.0 to 14.0, which can separate them into three different value levels: **Low**, **Middle**, and **Premium**.
+Before continuing our exploratory data analysis, we should make an initial transformation to make the dataset more suitable for further use. As discussed earlier, player costs range from 3.0 to 14.0, and we can separate them into three different value levels: **Low**, **Middle**, and **Premium**.
 
-To explore the most important data in FPL, players' total points, we should first examine the key performance data that can award players points. [[8]](https://www.premierleague.com/news/2173986) Extract these data from the raw dataset and rename them for ease of exploratory data analysis. After this step, let's take a look at the transformed data for its first 5 rows.
+To explore the most important data in FPL, players' total points, we should first examine the key performance data that can award players points. [[7]](https://www.premierleague.com/news/2173986) Extract these data from the raw dataset and rename them. After this step, let's take a look at the transformed data for its first 5 rows.
 
 ```{r transform_1, echo=TRUE}
 # get level function
@@ -143,9 +140,9 @@ knitr::kable(fpl_data[1:5,], caption =  "First 5 rows of fpl data")
 
 ## Performance Data Cleaning and Transform
 
-In the next stage, we will investigate the performance of players to determine why elite players are able to score more points. One way to explore this is to use expected values such as *expected goals (xG)* [[9]](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/), *expected assists (xA)* [[10]](https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/), and *expected goals conceded (xGC)* [[11]](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/). Fortunately, all of this data is included in the original dataset.
+In the next stage, we will try to find out the performance of players to determine why elite players are able to score more points. One way to do this is to use expected values such as *expected goals (xG)* [[8]](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/), *expected assists (xA)* [[9]](https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/), and *expected goals conceded (xGC)* [[10]](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/). Fortunately, all of this data is included in the raw dataset.
 
-As players have varying playing times, it is inaccurate to use actual or expected values directly. Therefore, we will introduce per 90 statistics, which represent values per 90 minutes of play. We will transform Points, Goals, xG, Assists, xA, GoalsConcede and xGC into Points per 90, Goals per 90, xG per 90, Assists per 90, xA per 90, GoalsConcede per 90 and xGC per 90.
+As players have different playing times, it is inaccurate to use actual or expected values directly. Therefore, we will introduce per 90 statistics, representing values per 90 minutes of play. We will transform Points, Goals, xG, Assists, xA, GoalsConcede and xGC into Points per 90, Goals per 90, xG per 90, Assists per 90, xA per 90, GoalsConcede per 90 and xGC per 90.
 
 ```{r transform_2}
 fpl_data <- fpl_data %>%
@@ -203,9 +200,9 @@ performance_data <- fpl_data[c(
 
 ## Penalty Takers Data Cleaning and Transform
 
-Penalties are the most probable opportunities to score during a football match, with each penalty shoot given an xG of 0.78 of the StatsBomb xG 2022 model[[13]](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). Accordingly, clubs should meticulously choose their penalty takers. Ideally, a player with a higher conversion ratio would be superior at finishing, possess improved shooting skills, and increase the likelihood of scoring the penalty kick.
+Penalties are the most likely opportunities to score during a football match, with each penalty shoot given an xG of 0.78 from the StatsBomb xG 2022 model. [[11]](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/) Therefore, clubs should wisely choose their penalty takers. A player with a higher conversion ratio would be superior at finishing, increasing the likelihood of scoring the penalty kick.
 
-Before analyzing the data on penalty takers, we must first make some data transformations. The original dataset, penalty order, treats players who are not among the first three in their club's penalty taking order as missing values. To address this, we can split the players in each club into two groups: penalty takers (pk taker) and non-penalty takers (non pk taker). We can then calculate the goal performance for both groups.
+If we are trying to analyze the data on penalty takers, we should make some cleanings and transformations first. The original dataset, penalty order, treats players who are not among the first three in their club's penalty taking order as missing values. To solve this problem, we can split the players in each club into two groups: penalty takers(pk taker) and non-penalty takers(non pk taker). We can then calculate the goal performance for both groups.
 
 ```{r transform_4}
 # check NA
@@ -233,7 +230,7 @@ knitr::kable(pk_taker_data[1:8,], caption =  "First 8 rows of PK Taker data")
 
 ## Distribution of Points Among Players
 
-The first thing we want to explore is the distribution of points for players, as points are what FPL is all about. To gain a clear insight, we can analyse players who played regularly, which means they played at least 1000 minutes in a single season.
+The first thing we want to explore is the distribution of points for players, as points are what FPL is all about. To gain a clear insight, we can analyze players who played regularly, which means they played at least 1000 minutes in 2022-23 season.
 
 ```{r desity}
 fpl_data %>%
@@ -248,7 +245,7 @@ fpl_data %>%
   theme(plot.title = element_text(size = 20))
 ```
 
-The density plot reveals that players' total points are typically centered around 50-100 points, although top players can score over 200 points in a season. According to FPL rules [[7]](https://fantasy.premierleague.com/help/rules), players from different positions have different methods for calculating their scoring points. Therefore, we can group players by position and examine their points distributions.
+The density plot shows that players' total points are centered around 50-100, although top players can score over 200 points in a season. According to FPL rules, players from different positions have different methods for calculating scoring points. Therefore, we can group players by position and observe their points distributions.
 
 ```{r multiple_desity}
 fpl_data %>%
@@ -263,11 +260,11 @@ fpl_data %>%
         plot.subtitle = element_text(size = 14))
 ```
 
-Based on the multiple density plot, it is evident that the distribution of defenders is the most concentrated, resulting in them scoring fewer points than other positions. While goalkeepers have a wider range of points, even the best goalkeeper cannot score very high points. The distribution of midfielders and forwards is similar, but top forwards have the potential to score the most points in a season.
+According to the multiple density plot above, it shows that the distribution of defenders is the most concentrated, and they scored fewer points than other positions. While goalkeepers have a wider range of points, even the best goalkeeper cannot score very high points. The distribution of midfielders and forwards is similar, but top forwards have the potential to score the most points in a season.
 
 ## Top 30 Players
 
-Once we have a general understanding of the total points earned by players, our next step is to examine the top 30 players.
+Our next step is to examine the top 30 players.
 
 ```{r horizonal_barplot, fig.height=8}
 fpl_data %>%
@@ -294,7 +291,7 @@ fpl_data %>%
   theme_ipsum()
 ```
 
-The horizontal barplot confirms our observations that the top 6 players, all of whom scored more than 200 points, are midfielders and forwards. Additionally, players who cost more in the same position tend to score better points. This suggests a correlation between points, positions, and values that should be explored in the next step.
+The horizontal barplot confirms our observations earlier that the top 6 players, all of whom scored more than 200 points, are midfielders and forwards. Additionally, players who cost more in the same position tend to score more points. This suggests a correlation between points, positions, and values. We should explored that in the next step.
 
 ## Points, Positions and Values
 
@@ -317,9 +314,9 @@ fpl_data %>%
   theme_ipsum()
 ```
 
-Based on the distribution of different levels across various positions, we can draw some observations from the plot. Goalkeepers have the lowest average cost among all positions. However, the boxplot indicates that there are more outliers for GKP than for any other position. This implies that while we spend less on GKP, they may have a higher chance of providing a better reward.
+Based on the total points distribution across different levels, we can draw some observations. Goalkeepers have the lowest average cost among all positions. However, the boxplot shows that there are more outliers for GKP than for any other position. This could shows us that even if we spend less on GKP, they may have a higher chance of providing a better reward.
 
-It can be observed that higher level players score a higher mean of points, indicating a positive correlation between overall cost and total points. The fact that all top level players are forwards and midfielders may contribute to this trend, as they have the most attacking resources available to help them score or assist a goal, resulting in a higher number of FPL points.
+It can also be observed that higher level players score a higher mean of points. There may be a positive correlation between cost and points. All top level players are forwards and midfielders, as they have the most attacking resources available to help them score or assist a goal, making them scoring a higher number of FPL points.
 
 # Exploratory Actual and Expected Values
 
@@ -353,7 +350,7 @@ performance_data[c("Minutes",
   theme(legend.title = element_blank())
 ```
 
-The boxplot allows us to observe that there are outliers present in the actual values that deviate significantly from the others. When calculating the per 90 values, it is important to consider that a player who has not played a total of 90 minutes in a season will have extremely high per 90 values. Therefore, it is necessary to exclude these values as they are invalid.
+The boxplot shows that there are outliers present in the actual values that deviate significantly from the others. Let's go back to the calculations. When calculating the per 90 values, it is important to consider that a player who has not played a total of 90 minutes in a season, which will make them have extremely high per 90 values. Therefore, it is necessary to exclude these values as they are invalid.
 
 ```{r transform_5}
 performance_data <- performance_data %>%
@@ -363,9 +360,7 @@ performance_data <- performance_data %>%
 
 ## Players' Performance
 
-For observing the correlation between a player's cost and their performance, we can focus on regular players who have played more than 90 minutes and scored at least one goal or provided at least one assist for an entire season. These regular players are the foundation of every club's attacking performance. We can use a scatter plot with the `geom_smooth()` function to observe any possible correlation. For a small dataset, we will use *LOESS* method to fit the smooth curve. [[12]](https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm)
-
-To prepare for visualization, it is necessary to perform some data transformations. Two new dataframes can be created: *goals_performance* which combines the players' Goals90 and xG90, and *assists_performance* which combines the players' assist data. For defenders, *goalsConceded_performance* dataframe can be created to observe their actual performance versus expected performance.
+To observe the correlation between a player's cost and their performance, we can focus on players who have played more than 90 minutes and scored at least one goal or provided at least one assist for an entire season. These regular players are the foundation of every club's attacking performance. We can use a scatter plot with the `geom_smooth()` function to observe any possible correlation. For a small dataset, we will use *LOESS* method to fit the smooth curve. [[12]](https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm)
 
 ```{r grid_scatter_smooth, fig.height=7, fig.width=10}
 # goals performance
@@ -412,13 +407,15 @@ suppressMessages({
 })
 ```
 
-By examining the first row of the grid plot, we can observe the performance of attackers (forwards and midfielders) who played regular minutes in terms of Goals and Assists. The results indicate that as the cost of players increases from low to premium level, their attacking performance also improves. This suggests that highly-priced players have a higher conversion ratio and are more skilled at finishing or assisting compared to other players. Therefore, investing in premium players could lead to greater rewards and is a recommended strategy when playing FPL.
+Examining the first row of the grid plot, we can observe the performance of attackers (forwards and midfielders) who played regular minutes in terms of Goals and Assists. The results shows that as the cost of players increases from low to premium level, their attacking performance also improves. This suggests that highly-priced players have a higher conversion ratio and are more skilled at finishing or assisting compared to other players. Therefore, investing in premium players could be a recommended strategy when playing FPL.
 
-In the second row, we can see how defenders and goalkeepers perform in terms of goals conceded. The chart shows that the actual and expected values are nearly the same across all levels of players. This implies that investing heavily in defenders may not yield significantly better results than investing in low level ones. This may be because defense is a team effort, and having a couple of elite players may not make a significant difference in the outcome.
+In the second row, we can see how defenders and goalkeepers perform. The chart shows that the actual and expected values are nearly the same across all levels. This means that investing heavily in defenders may not have better results than investing in low level ones. This may be because defense is a team effort, and having a couple of elite players may not make a significant difference.
 
 # Exploratory Club's Penalty Takers
 
-To visualize the performance of players who take penalty kicks and those who do not, we can use a stacked bar plot. A positive difference occurs when a player's actual value is greater than their expected value, indicating that they performed better than most other players. Conversely, a negative difference occurs when a player's actual value is less than their expected value, indicating that they performed worse than others. A higher diff value suggests that the player has better shooting technique and is more likely to score goals, as it indicates that the actual goals value is greater than the expected one.
+To visualize the performance of players who take penalty kicks and those who do not, we can use a stacked barplot. 
+
+A positive difference occurs when a player's actual value is greater than their expected value, which means they performed better than most other players. Conversely, a negative difference occurs when a player's actual value is less than their expected value, indicating that they performed worse than others. A higher diff value suggests that the player has better shooting technique and is more likely to score goals.
 
 ```{r stacked_barplot}
 pk_taker_data %>%
@@ -438,13 +435,13 @@ pk_taker_data %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-Based on the plot, it is clear that the majority of clubs made wise choices when selecting their penalty takers, as the performance of those who took penalties resulted in more goals than those who did not. Nevertheless, there is room for improvement for Arsenal, Leicester, and Liverpool, particularly Arsenal, which may need to reconsider their choice of penalty takers.
+Based on the plot, it is clear that most of clubs made wise choices when selecting their penalty takers, as the performance of those who took penalties were better than those who did not. But some clubs like Arsenal, Leicester, and Liverpool, particularly Arsenal, may need to reconsider their penalty takers.
 
 # Exploratory General and Performance Statistics
 
 As discussed at the very beginning, let's go back for the top 30 players. 
 
-To display the correlation between player performance and positions with general statistics like points and minutes played, we can create a heatmap. We will divide the statistics into three groups: general stats, which include Points90 and Minutes; offensive stats, which include Goals90, xG90, Assists90, and xA90; and defensive stats, which include GC90, xGC90, and CS.
+we can create a heatmap to display the correlation between player performance and positions with general statistics like points and minutes played. We will divide the statistics into three groups: general stats, which include Points90 and Minutes; offensive stats, which include Goals90, xG90, Assists90, and xA90; and defensive stats, which include GC90, xGC90, and CS.
 
 ```{r heatmap, fig.height=6, fig.width=8}
 plot_data <- performance_data %>%
@@ -526,28 +523,30 @@ legend(
 )
 ```
 
-The heatmap shows that attacking players have significantly higher scores due to their strong attacking statistics. Elite-level players perform similarly to their expected values, indicating their skills translate expected rewards into actual ones. Among the top 30 players, defenders have strong performances in GC (Goals Conceded) and CS (Clean Sheet), with most of their points coming from defensive rewards. However, some defenders such as Tripper and Alexander-Arnold have outstanding assist performances, making them better picks.
+The heatmap shows that attacking players have higher scores due to their strong attacking statistics. Elite players perform similarly to their expected values, Indicating their capability to translate expectations into actual results. 
 
-Observation can guide our FPL playing strategy in two ways. Firstly, it is recommended to select as many elite attackers as possible, primarily based on their high conversion rates. Secondly, it is advised to choose defenders who possess a strong potential for assists, which will provide them with an advantage in earning high FPL points.
+Among the top 30 players, defenders have strong performances in GC(Goals Conceded) and CS(Clean Sheet), and most of their points coming from defensive rewards. However, some defenders such as Tripper and Alexander-Arnold have outstanding assist performances, making them better picks.
+
+These Observations can guide our FPL playing strategy. Firstly, select as many elite attackers as possible, because of their high conversion rates. Secondly, choose defenders who have a strong potential for assists.
 
 # Conclusion
 
-This report examines the data from the 2022-23 season of FPL player statistics. First, we observed a positive correlation between points and values by analyzing the points distribution. Then, we found that a player's high conversion rate is likely to result in a high score by comparing their actual and expected values. Lastly, we evaluated club penalty takers as well as player performance and general statistics.
+This report examines the data from the 2022-23 season of FPL player. First, we find out a positive correlation between points and values by analyzing the points distribution. Then, we compare players' actual and expected values, and find out that a player's high conversion rate is likely to result in a high score. Lastly, we explore club penalty takers as well as player performance and general statistics.
 
-We have some advice for Fantasy Premier League (FPL) players based on our exploratory findings. It is recommended to focus on premium attacking players and select defenders who have a high number of assists returns. It is also suggested to avoid wasting your budget on goalkeepers and regular defenders, as their rewards are similar across all price levels.
+We have some advice for Fantasy Premier League(FPL) players based on our exploratory findings. We should focus on premium attacking players and select defenders who have a high number of assists returns. And we should avoid wasting the budget on goalkeepers and regular defenders, as their rewards are similar across all price levels.
 
 # Reference
 
 1.  ["English football league system"](https://en.wikipedia.org/wiki/English_football_league_system). *en.wikipedia.org.*
 2.  ["How Many Play FPL?"](https://allaboutfpl.com/2022/06/number-of-people-who-played-fpl-each-season-how-many-play-fpl/). *allaboutfpl.com.*
-3.  ["Fantasy_Premier_League"](https://en.wikipedia.org/wiki/Fantasy_Premier_League). *en.wikipedia.org.*
-4.  ["Fantasy Premier League Dataset 2022-2023"](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023). *www.kaggle.com*
-5.  ["Official Website Fantasy Premier League"](https://fantasy.premierleague.com/). *fantasy.premierleague.com*
-6.  ["Fantasy football (association)"](https://en.wikipedia.org/wiki/Fantasy_football_(association)). *en.wikipedia.org.*
-7.  ["Official Website Fantasy Premier League Rules"](https://fantasy.premierleague.com/help/rules). *fantasy.premierleague.com*
-8.  ["How are points awarded?"](https://www.premierleague.com/news/2173986). *fantasy.premierleague.com*
-9.  ["expected-goals-xg-explained"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
-10. ["what-are-expected-assists-xa"](https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/). *theanalyst.com*
-11. ["xG, xA, xGI and xGC: What are expected stats and who are the best FPL picks?"](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/).
+3.  ["Fantasy Premier League Dataset 2022-2023"](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023). *www.kaggle.com*
+4.  ["Official Website Fantasy Premier League"](https://fantasy.premierleague.com/). *fantasy.premierleague.com*
+5.  ["Fantasy football (association)"](https://en.wikipedia.org/wiki/Fantasy_football_(association)). *en.wikipedia.org.*
+6.  ["Official Website Fantasy Premier League Rules"](https://fantasy.premierleague.com/help/rules). *fantasy.premierleague.com*
+7.  ["How are points awarded?"](https://www.premierleague.com/news/2173986). *fantasy.premierleague.com*
+8.  ["expected-goals-xg-explained"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
+9. ["what-are-expected-assists-xa"](https://theanalyst.com/eu/2021/03/what-are-expected-assists-xa/). *theanalyst.com*
+10. ["xG, xA, xGI and xGC: What are expected stats and who are the best FPL picks?"](https://fantasyfootballcommunity.com/xg-xa-xgi-and-xgc-what-are-expected-stats-and-who-are-the-best-fpl-picks/).
+11. ["What Are Expected Goals (xG)?"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
 12. ["LOESS (aka LOWESS)"](https://www.itl.nist.gov/div898/handbook/pmd/section1/pmd144.htm). *nist.gov*
-13. ["What Are Expected Goals (xG)?"](https://statsbomb.com/soccer-metrics/expected-goals-xg-explained/). *statsbomb.com*
+
