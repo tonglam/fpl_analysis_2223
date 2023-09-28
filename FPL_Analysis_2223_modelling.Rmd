@@ -32,7 +32,7 @@ path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
 
-# Data Prepare
+# Data Preparation
 
 ## Target Value
 
@@ -108,15 +108,15 @@ fpl_data <- fpl_raw_data[c(
 kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl data")
 ```
 
-# Feature Selection
-
-Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
-
 # Classification
 
 ## Binary Classification Problem
 
 offensive and defensive
+
+## Feature Selection
+
+Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
 ## Single Variable
 
