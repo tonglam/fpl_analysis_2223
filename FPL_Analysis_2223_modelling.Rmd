@@ -1,6 +1,8 @@
 ---
 title: "FPL_Analysis_2223_modelling"
-author: "Tong Hanyu Xue"
+author: 
+- "Tong (24056082)"
+- "Hanyu Xue (24070974)"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -9,21 +11,29 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(warning = FALSE)
+#knitr::opts_chunk$set(warning = FALSE)
 ```
 
-## Introduction
+# Introduction
 
-- Load libraries
-```{r,, message=FALSE}
-library(ggplot2)
-library(dplyr)
+## Load libraries
+
+```{r library, message=FALSE}
+library(tidyverse)
 library(knitr)
-library()
-
+library(hrbrthemes)
+library(gridExtra)
 ```
 
-## Classification
 
-## Cluster 
+## Read Data
 
+```{r read_data}
+path <- "./FPL_Dataset_2022-2023.csv"
+fpl_raw_data <- read.csv(path)
+```
+
+
+# Classification
+
+# Cluster
