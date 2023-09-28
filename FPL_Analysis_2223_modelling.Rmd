@@ -118,7 +118,31 @@ offensive and defensive
 
 Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
+## Split data into 2 sets
+```{r split data}
+#do a 90/10 split to form the training and test sets.
+set.seed(500)
+fortrain <- runif(nrow(fpl_data)) < 0.9
+train <- fpl_data[fortrain,]
+test <- fpl_data[!fortrain,]
+#
+```
+
 ## Single Variable
+- Single variable predictions model: feature
+```{r Single variable predictions}
+mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
+  pPos <- sum(outCol == pos) / length(outCol)
+  naTab <- table(as.factor(outCol[is.na(varCol)]))
+  pPosWna <- (naTab / sum(naTab))[pos]
+  vTab <- table(as.factor(outCol),varCol)
+  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
+  pred <- pPosWv[appCol]
+  pred[is.na(appCol)] <- pPosWna
+  pred[is.na(pred)] <- pPos
+  pred
+}
+```
 
 ## Multiple Variables
 
