@@ -33,8 +33,9 @@ path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
 
+# Data Prepare
 
-# Classification
+## Target Value
 
 add a target column
 ```{r transform_1}
@@ -107,6 +108,25 @@ fpl_data <- fpl_raw_data[c(
 kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl data")
 ```
 
+# Feature Engineering
+Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
+
+# Classification
+
+## Binary Classification Problem
+offensive and defensive
+
+## Single Variable
+
+## Multiple Variables
+
+### Decision Tree
+
+### Random Forest
+
+### XGBoost
+
+## Module Evaluation
 
 # Cluster
