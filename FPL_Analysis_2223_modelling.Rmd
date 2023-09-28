@@ -25,7 +25,6 @@ library(hrbrthemes)
 library(gridExtra)
 ```
 
-
 ## Read Data
 
 ```{r read_data}
@@ -38,6 +37,7 @@ fpl_raw_data <- read.csv(path)
 ## Target Value
 
 add a target column
+
 ```{r transform_1}
 # get level function
 get_cost_level <- function(cost_bin) {
@@ -108,13 +108,14 @@ fpl_data <- fpl_raw_data[c(
 kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl data")
 ```
 
-# Feature Engineering
-Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
+# Feature Selection
 
+Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
 # Classification
 
 ## Binary Classification Problem
+
 offensive and defensive
 
 ## Single Variable
