@@ -36,4 +36,77 @@ fpl_raw_data <- read.csv(path)
 
 # Classification
 
+add a target column
+```{r transform_1}
+# get level function
+get_cost_level <- function(cost_bin) {
+  level <- levels(cut_interval((fpl_raw_data$now_cost) / 10, 3))
+  case_when(
+    cost_bin == level[1] ~ "Low",
+    cost_bin == level[2] ~ "Middle",
+    cost_bin == level[3] ~ "Premium",
+    .default = NA
+  )
+}
+
+# transform data
+fpl_data <- fpl_raw_data[c(
+  "web_name",
+  "team",
+  "position",
+  "total_points",
+  "points_per_game",
+  "now_cost",
+  "minutes",
+  "goals_scored",
+  "expected_goals",
+  "assists",
+  "expected_assists",
+  "goals_conceded",
+  "expected_goals_conceded",
+  "clean_sheets",
+  "penalties_order"
+)] %>%
+  rename(all_of(
+    c(
+      Player = "web_name",
+      Club = "team",
+      Position = "position",
+      Points = "total_points",
+      Points90 = "points_per_game",
+      Cost = "now_cost",
+      Minutes = "minutes",
+      Goals = "goals_scored",
+      xG = "expected_goals",
+      Assists = "assists",
+      xA = "expected_assists",
+      GC = "goals_conceded",
+      xGC = "expected_goals_conceded",
+      CS = "clean_sheets",
+      PK_Taker = "penalties_order"
+    )
+  )) %>%
+  # cost is 10 times larger because it is easier to store an integer in the database
+  # now we can return it to its actual value by dividing it by 10
+  mutate(Cost = Cost / 10) %>%
+  # separate the players into three groups based on their values
+  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
+  # categorize player level by their values
+  mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin) %>% 
+  # create label feature
+  mutate(
+    Label = case_when(
+      Position == "FWD" ~ "Offensive",
+      Position == "MID" ~ "Offensive",
+      Position == "DEF" ~ "Deffensive",
+      Position == "GKP" ~ "Deffensive"
+    ), .before = Player
+)
+
+# show the table(first five rows)
+kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl data")
+```
+
+
+
 # Cluster
