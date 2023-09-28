@@ -12,3 +12,18 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(warning = FALSE)
 ```
 
+## Introduction
+
+- Load libraries
+```{r,, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library()
+
+```
+
+## Classification
+
+## Cluster 
+
