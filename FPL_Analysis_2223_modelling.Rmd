@@ -23,6 +23,8 @@ library(tidyverse)
 library(knitr)
 library(hrbrthemes)
 library(gridExtra)
+library(caret)
+library(rpart)
 ```
 
 ## Read Data
@@ -34,97 +36,219 @@ fpl_raw_data <- read.csv(path)
 
 # Data Preprocessing
 
+## Initial Transform
+
+```{r transform}
+model_data <- fpl_raw_data %>%
+  # discard some columns, which are not useful for our analysis
+  # for example, names, teams, points, news and variable related to cost
+  select(
+    -c(
+      "id",
+      "name",
+      "now_cost",
+      "team",
+      "transfers_out",
+      "value_form",
+      "value_season",
+      "cost_change_start",
+      "news_added",
+      "cost_change_start_fall",
+      "ep_next",
+      "event_points",
+      "web_name",
+      "status",
+      "news",
+      "chance_of_playing_next_round",
+      "dreamteam_count",
+      "chance_of_playing_this_round",
+      "points_per_game",
+      "total_points",
+      "in_dreamteam",
+      "form",
+      "ep_this",
+      "transfers_in",
+      "selected_by_percent"
+    )
+  ) %>%
+  select(-ends_with("rank")) %>%
+  select(-ends_with("rank_type"))
+
+str(model_data)
+summary(model_data)
+
+# remove raw data
+rm(fpl_raw_data)
+```
+
+## Handle Missing Values
+
+```{r missing_values}
+# check missing values
+sum(is.na(model_data))
+# check which columns have missing values
+missing_values_sum <- colSums(is.na(model_data) > 0)
+missing_values_cols <- missing_values_sum[missing_values_sum > 0]
+missing_values_cols
+# convert missing values columns to categorical variables, True represent not missing and False represent missing
+model_data <- model_data %>%
+  mutate(
+    corners_and_indirect_freekicks_order = ifelse(is.na(corners_and_indirect_freekicks_order), FALSE, TRUE),
+    penalties_order = ifelse(is.na(penalties_order), FALSE, TRUE),
+    direct_freekicks_order = ifelse(is.na(direct_freekicks_order), FALSE, TRUE)
+  )
+# check missing values again
+sum(is.na(model_data))
+```
+
+
+# Future Engineering
+
+drop Position Column because it is highly correlated with the label column, like we just used it to create the label column.
+
+Then, we should covert the label column to numerical values, 1 present offensive, 0 present defensive.
+
+```{r transform_2}
+model_data <- model_data %>%
+  # drop highly correlated columns, if a variable has per 90 values, remain per 90 values instead of the origin ones because they are more useful for further analysis
+  select(
+    -c(
+      "clean_sheets",
+      "expected_assists",
+      "starts",
+      "expected_goals_conceded",
+      "saves",
+      "expected_goal_involvements",
+      "expected_goals",
+      "goals_conceded"
+    )
+  ) %>%
+  # transform other performance variable to per 90 values
+  mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>% 
+  mutate(goals_scored_per_90 = goals_scored / minutes * 90, .after = goals_scored) %>%
+  mutate(bonus_per_90 = bonus / minutes * 90, .after = bonus) %>%
+  mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
+  mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
+  mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
+  mutate(creativity_per_90 = creativity / minutes * 90, .after = creativity) %>%
+  mutate(own_goals_per_90 = own_goals / minutes * 90, .after = own_goals) %>%
+  mutate(yellow_cards_per_90 = yellow_cards / minutes * 90, .after = yellow_cards) %>%
+  # drop the origin columns
+  select(
+    -c(
+      "assists",
+      "goals_scored",
+      "bonus",
+      "red_cards",
+      "threat",
+      "influence",
+      "creativity",
+      "own_goals",
+      "yellow_cards"
+    )) %>% 
+  # drop columns highly correlated with the some other columns
+  select(
+    -c(
+      "penalties_missed",
+      "penalties_saved",
+      "ict_index"
+    )
+  )
+
+str(model_data)
+summary(model_data)
+```
+
+```{r missing_values_2}
+# count missing values
+missing_values <- apply(is.na(model_data), 2, sum)
+na_values <- which(missing_values > 0)
+na_values
+# if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
+# if the expected 90 values are NaN, it means that the player did not play a single minute
+model_data$goals_scored_per_90 <-
+  ifelse(is.na(model_data$goals_scored_per_90), 0, model_data$goals_scored_per_90)
+model_data$bouns_per_90 <-
+  ifelse(is.na(model_data$bonus_per_90), 0, model_data$bonus_per_90)
+model_data$red_cards_per_90 <-
+  ifelse(is.na(model_data$red_cards_per_90), 0, model_data$red_cards_per_90)
+model_data$threat_per_90 <-
+  ifelse(is.na(model_data$threat_per_90), 0, model_data$threat_per_90)
+model_data$influence_per_90 <-
+  ifelse(is.na(model_data$influence_per_90), 0, model_data$influence_per_90)
+model_data$creativity_per_90 <-
+  ifelse(is.na(model_data$creativity_per_90), 0, model_data$creativity_per_90)
+model_data$own_goals_per_90 <-
+  ifelse(is.na(model_data$own_goals_per_90), 0, model_data$own_goals_per_90)
+model_data$yellow_cards_per_90 <-
+  ifelse(is.na(model_data$yellow_cards_per_90), 0, model_data$yellow_cards_per_90)
+model_data$assists_per_90 <-
+  ifelse(is.na(model_data$assists_per_90), 0, model_data$assists_per_90)
+
+# look at the missing values again, they have been cleaned
+missing_values <- apply(is.na(model_data), 2, sum)
+missing_values
+```
+
+convert categorical column to numerical values.
+convert logical columns to numerical values.
+
+```{r covert_to_numerical}
+model_data <- model_data %>%
+  # convert categorical column to numerical values
+  mutate(
+    position = ifelse(position == "GKP", 1,
+                      ifelse(position == "DEF", 2,
+                             ifelse(position == "MID", 3, 4)))
+  ) %>%
+  # convert logical columns to numerical values
+  mutate(
+    penalties_order = ifelse(penalties_order == TRUE, 1, 0),
+    direct_freekicks_order = ifelse(direct_freekicks_order == TRUE, 1, 0),
+    corners_and_indirect_freekicks_order = ifelse(corners_and_indirect_freekicks_order == TRUE, 1, 0)
+    ) %>% 
+  rename(
+    penalties_taker = "penalties_order",
+    direct_freekicks_taker = "direct_freekicks_order",
+    corners_and_indirect_freekicks_taker = "corners_and_indirect_freekicks_order"
+  )
+```
+
+## Pearson Correlation
+
+## REF
+
+# Classification
+
 ## Target Value
 
 add a target column
 
-```{r transform_1}
-# get level function
-get_cost_level <- function(cost_bin) {
-  level <- levels(cut_interval((fpl_raw_data$now_cost) / 10, 3))
-  case_when(
-    cost_bin == level[1] ~ "Low",
-    cost_bin == level[2] ~ "Middle",
-    cost_bin == level[3] ~ "Premium",
-    .default = NA
-  )
-}
-
-# transform data
-fpl_data <- fpl_raw_data[c(
-  "web_name",
-  "team",
-  "position",
-  "total_points",
-  "points_per_game",
-  "now_cost",
-  "minutes",
-  "goals_scored",
-  "expected_goals",
-  "assists",
-  "expected_assists",
-  "goals_conceded",
-  "expected_goals_conceded",
-  "clean_sheets",
-  "penalties_order"
-)] %>%
-  rename(all_of(
-    c(
-      Player = "web_name",
-      Club = "team",
-      Position = "position",
-      Points = "total_points",
-      Points90 = "points_per_game",
-      Cost = "now_cost",
-      Minutes = "minutes",
-      Goals = "goals_scored",
-      xG = "expected_goals",
-      Assists = "assists",
-      xA = "expected_assists",
-      GC = "goals_conceded",
-      xGC = "expected_goals_conceded",
-      CS = "clean_sheets",
-      PK_Taker = "penalties_order"
-    )
-  )) %>%
-  # cost is 10 times larger because it is easier to store an integer in the database
-  # now we can return it to its actual value by dividing it by 10
-  mutate(Cost = Cost / 10) %>%
-  # separate the players into three groups based on their values
-  mutate(Cost_bin = cut_interval(Cost, 3), .after = Cost) %>%
-  # categorize player level by their values
-  mutate(Level = get_cost_level(Cost_bin), .after = Cost_bin) %>% 
-  # create label feature
+```{r target}
+model_data <- model_data %>%
+  # create target column
   mutate(
-    Label = case_when(
-      Position == "FWD" ~ "Offensive",
-      Position == "MID" ~ "Offensive",
-      Position == "DEF" ~ "Deffensive",
-      Position == "GKP" ~ "Deffensive"
-    ), .before = Player
-)
+    player_type = ifelse(position == "GKP" |
+                           position == "DEF", "Defensive", "Offensive"),
+    .before = position
+  ) %>%
+  select(-position)
 
-# show the table(first five rows)
-kable(fpl_data[1:5, ], caption =  "First 5 rows of fpl data")
+knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
-# Classification
 
 ## Binary Classification Problem
 
 offensive and defensive
 
-## Feature Selection
-
-Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
-
 ## Split data into 2 sets
 ```{r split data}
 #do a 90/10 split to form the training and test sets.
 set.seed(500)
-fortrain <- runif(nrow(fpl_data)) < 0.9
-train <- fpl_data[fortrain,]
-test <- fpl_data[!fortrain,]
+fortrain <- runif(nrow(model_data)) < 0.9
+train <- model_data[fortrain,]
+test <- model_data[!fortrain,]
 #
 ```
 
@@ -142,6 +266,40 @@ mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
   pred[is.na(pred)] <- pPos
   pred
 }
+```
+
+
+# Feature Selection
+
+Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
+
+## Feature Selection Methods
+
+Since our dataset contains both categorical and numerical features, we cannot use simple filter methods such as Pearson Correlation or Chi-Square Test to select features. Because they work only in categorical variables and numerical variables respectively. Instead, we will use the following methods to select features.
+
+### Recursive Feature Elimination - Wrapped Methods
+
+```{r RFE}
+
+features <- model_data[, c("Points", "Cost", "Minutes", "Goals", "xG", "Assists", "xA", "GC", "xGC", "CS")]
+target <- fpl_data$Label
+
+# Specify the number of desired features to select
+num_features <- 3
+
+# Create the RFE control object
+ctrl <- rfeControl(
+  functions = rfFuncs,  # Use decision tree as the learning algorithm
+  method = "cv",  # Cross-validation method
+  number = 5,  # Number of folds for cross-validation
+  verbose = FALSE
+)
+
+# Perform feature selection using RFE
+rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
+
+# Get the selected features
+selected_features <- rfe_result$optVariables
 ```
 
 ## Multiple Variables
