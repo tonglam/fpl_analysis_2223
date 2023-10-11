@@ -1,8 +1,8 @@
 ---
 title: "FPL_Analysis_2223_modelling"
 author: 
-- "Tong (24056082)"
-- "Hanyu Xue (24070974)"
+- "Tong LAN (24056082)"
+- "Hanyu XUE (24070974)"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -51,7 +51,6 @@ model_data <- fpl_raw_data %>%
       "id",
       "name",
       "now_cost",
-      "team",
       "transfers_out",
       "value_form",
       "value_season",
@@ -84,7 +83,7 @@ str(model_data)
 summary(model_data)
 
 # remove raw data
-rm(fpl_raw_data)
+# rm(fpl_raw_data)
 ```
 
 ## Handle Missing Values
@@ -97,11 +96,19 @@ missing_values_sum <- colSums(is.na(model_data) > 0)
 missing_values_cols <- missing_values_sum[missing_values_sum > 0]
 missing_values_cols
 # convert missing values columns to categorical variables, True represent not missing and False represent missing
+convert_order_to_name <- function(value) {
+  case_when(
+            value == 1 ~ "First",
+            value == 2 ~ "Second",
+            value == 3 ~ "Thrid",
+            .default = "No")
+}
+
 model_data <- model_data %>%
   mutate(
-    corners_and_indirect_freekicks_order = ifelse(is.na(corners_and_indirect_freekicks_order), FALSE, TRUE),
-    penalties_order = ifelse(is.na(penalties_order), FALSE, TRUE),
-    direct_freekicks_order = ifelse(is.na(direct_freekicks_order), FALSE, TRUE)
+    corners_and_indirect_freekicks_order = convert_order_to_name(corners_and_indirect_freekicks_order),
+    penalties_order = convert_order_to_name(penalties_order),
+    direct_freekicks_order = convert_order_to_name(direct_freekicks_order)
   )
 # check missing values again
 sum(is.na(model_data))
@@ -242,6 +249,7 @@ convert categorical column to numerical values. convert logical columns to numer
 <!--   ) -->
 
 <!-- ``` -->
+
 
 # Classification
 
