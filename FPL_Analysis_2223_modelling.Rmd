@@ -28,6 +28,7 @@ library(rpart)
 library(rpart.plot)
 library(randomForest)
 library(dendextend)
+library(ROCR)
 ```
 
 ## Read Data
@@ -112,7 +113,9 @@ model_data <- model_data %>%
 # check missing values again
 sum(is.na(model_data))
 ```
+
 ## Split data into 2 sets
+
 ```{r split data}
 #do a 90/10 split to form the training and test sets.
 set.seed(500)
@@ -176,6 +179,7 @@ train_data <- train_data %>%
 str(train_data)
 summary(train_data)
 ```
+
 ### Features that were removed
 
 ### Features that were included
@@ -204,8 +208,48 @@ missing_values <- apply(is.na(train_data), 2, sum)
 missing_values
 ```
 
-convert categorical column to numerical values.
-convert logical columns to numerical values.
+convert categorical column to numerical values. convert logical columns to numerical values.
+
+<!-- ```{r covert_to_numerical} -->
+
+<!-- train_data <- train_data %>% -->
+
+<!--   # convert categorical column to numerical values -->
+
+<!--   mutate( -->
+
+<!--     position = ifelse(position == "GKP", 1, -->
+
+<!--                       ifelse(position == "DEF", 2, -->
+
+<!--                              ifelse(position == "MID", 3, 4))) -->
+
+<!--   ) %>% -->
+
+<!--   # convert logical columns to numerical values -->
+
+<!--   mutate( -->
+
+<!--     penalties_order = ifelse(penalties_order == TRUE, 1, 0), -->
+
+<!--     direct_freekicks_order = ifelse(direct_freekicks_order == TRUE, 1, 0), -->
+
+<!--     corners_and_indirect_freekicks_order = ifelse(corners_and_indirect_freekicks_order == TRUE, 1, 0) -->
+
+<!--     ) %>%  -->
+
+<!--   rename( -->
+
+<!--     penalties_taker = "penalties_order", -->
+
+<!--     direct_freekicks_taker = "direct_freekicks_order", -->
+
+<!--     corners_and_indirect_freekicks_taker = "corners_and_indirect_freekicks_order" -->
+
+<!--   ) -->
+
+<!-- ``` -->
+
 
 # Classification
 
@@ -226,7 +270,6 @@ train_data <- train_data %>%
 knitr::kable(train_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
-
 ## Binary Classification Problem
 
 offensive and defensive
@@ -235,6 +278,9 @@ offensive and defensive
 
 Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
+```{r}
+
+```
 
 ## normalization, standerisation
 
@@ -268,10 +314,16 @@ rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
 selected_features <- rfe_result$optVariables
 ```
 
-
 ## Single Variable
-- Single variable predictions model: feature
+
+### For Categorical
+
+- Create a function for single variable predictions
+
 ```{r Single variable predictions}
+pos <- '1'
+outCol <- names(train_data)[-1]
+varCol <- 
 mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
   pPos <- sum(outCol == pos) / length(outCol)
   naTab <- table(as.factor(outCol[is.na(varCol)]))
@@ -285,6 +337,56 @@ mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
 }
 ```
 
+```{r}
+# call the predict function for the candidate columns
+for(v in catVars) {
+  pi <- paste('pred', v, sep='')
+  dTrain[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dTrain[,v])
+  dCal[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dCal[,v])
+  dTest[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dTest[,v])
+}
+```
+
+- Evaluate the performance of each single variable model by AUC
+
+```{r}
+calcAUC <- function(predcol, outcol) {
+  perf <- performance(prediction(predcol, outcol == pos), 'auc')
+  as.numeric(perf@y.values)
+}
+```
+
+```{r}
+for(v in catVars) {
+  pi <- paste('pred', v, sep = '')
+  aucTrain <- calcAUC(dTrain[, pi], dTrain[, outcome])
+  if (aucTrain >= 0.8) {
+    aucCal <- calcAUC(dCal[, pi], dCal[, outcome])
+    print(sprintf(
+      "%s: trainAUC: %4.3f; calibrationAUC: %4.3f",
+      pi,
+      aucTrain,
+      aucCal
+    ))
+  }
+}
+```
+
+(type later: explanation for result here) 
+### For Numerical
+- Create a function for single variable predictions
+```{r}
+mkPredN <- function(outCol, varCol, appCol) {
+# compute the cuts
+cuts <- unique(
+quantile(varCol, probs=seq(0, 1, 0.1), na.rm=T))
+# discretize the numerical columns
+varC <- cut(varCol,cuts)
+appC <- cut(appCol,cuts)
+mkPredC(outCol,varC,appC)
+}
+```
+- Evaluate the performance of each single variable model by AUC
 
 ## Multiple Variables
 
