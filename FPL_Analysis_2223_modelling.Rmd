@@ -173,7 +173,7 @@ summary(train_data)
 
 ### Features that were included
 
-234
+23456
 ```{r missing_values_2}
 # count missing values
 missing_values <- apply(is.na(train_data), 2, sum)
