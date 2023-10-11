@@ -25,11 +25,14 @@ library(hrbrthemes)
 library(gridExtra)
 library(caret)
 library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(dendextend)
 ```
 
 ## Read Data
 
-```{r read_data}
+```{r read_data, message=FALSE}
 path <- "./FPL_Dataset_2022-2023.csv"
 fpl_raw_data <- read.csv(path)
 ```
@@ -38,7 +41,7 @@ fpl_raw_data <- read.csv(path)
 
 ## Initial Transform
 
-```{r transform}
+```{r transform, results='hide'}
 model_data <- fpl_raw_data %>%
   # discard some columns, which are not useful for our analysis
   # for example, names, teams, points, news and variable related to cost
@@ -68,7 +71,9 @@ model_data <- fpl_raw_data %>%
       "form",
       "ep_this",
       "transfers_in",
-      "selected_by_percent"
+      "selected_by_percent",
+      "bps",
+      "bonus"
     )
   ) %>%
   select(-ends_with("rank")) %>%
@@ -100,16 +105,24 @@ model_data <- model_data %>%
 # check missing values again
 sum(is.na(model_data))
 ```
+## Split data into 2 sets
+```{r split data}
+#do a 90/10 split to form the training and test sets.
+set.seed(500)
+fortrain <- runif(nrow(model_data)) < 0.9
+train_data <- model_data[fortrain,]
+test_data <- model_data[!fortrain,]
+#
+```
 
-
-# Future Engineering
+## Future Engineering
 
 drop Position Column because it is highly correlated with the label column, like we just used it to create the label column.
 
 Then, we should covert the label column to numerical values, 1 present offensive, 0 present defensive.
 
-```{r transform_2}
-model_data <- model_data %>%
+```{r transform_2, results='hide'}
+train_data <- train_data %>%
   # drop highly correlated columns, if a variable has per 90 values, remain per 90 values instead of the origin ones because they are more useful for further analysis
   select(
     -c(
@@ -126,7 +139,6 @@ model_data <- model_data %>%
   # transform other performance variable to per 90 values
   mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>% 
   mutate(goals_scored_per_90 = goals_scored / minutes * 90, .after = goals_scored) %>%
-  mutate(bonus_per_90 = bonus / minutes * 90, .after = bonus) %>%
   mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
   mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
   mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
@@ -138,7 +150,6 @@ model_data <- model_data %>%
     -c(
       "assists",
       "goals_scored",
-      "bonus",
       "red_cards",
       "threat",
       "influence",
@@ -155,39 +166,35 @@ model_data <- model_data %>%
     )
   )
 
-str(model_data)
-summary(model_data)
+str(train_data)
+summary(train_data)
 ```
+### Features that were removed
+
+### Features that were included
 
 234
 ```{r missing_values_2}
 # count missing values
-missing_values <- apply(is.na(model_data), 2, sum)
+missing_values <- apply(is.na(train_data), 2, sum)
 na_values <- which(missing_values > 0)
 na_values
 # if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
 # if the expected 90 values are NaN, it means that the player did not play a single minute
-model_data$goals_scored_per_90 <-
-  ifelse(is.na(model_data$goals_scored_per_90), 0, model_data$goals_scored_per_90)
-model_data$bouns_per_90 <-
-  ifelse(is.na(model_data$bonus_per_90), 0, model_data$bonus_per_90)
-model_data$red_cards_per_90 <-
-  ifelse(is.na(model_data$red_cards_per_90), 0, model_data$red_cards_per_90)
-model_data$threat_per_90 <-
-  ifelse(is.na(model_data$threat_per_90), 0, model_data$threat_per_90)
-model_data$influence_per_90 <-
-  ifelse(is.na(model_data$influence_per_90), 0, model_data$influence_per_90)
-model_data$creativity_per_90 <-
-  ifelse(is.na(model_data$creativity_per_90), 0, model_data$creativity_per_90)
-model_data$own_goals_per_90 <-
-  ifelse(is.na(model_data$own_goals_per_90), 0, model_data$own_goals_per_90)
-model_data$yellow_cards_per_90 <-
-  ifelse(is.na(model_data$yellow_cards_per_90), 0, model_data$yellow_cards_per_90)
-model_data$assists_per_90 <-
-  ifelse(is.na(model_data$assists_per_90), 0, model_data$assists_per_90)
+train_data <- train_data %>%
+  mutate(
+    assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
+    goals_scored_per_90 = ifelse(is.na(goals_scored_per_90), 0, goals_scored_per_90),
+    red_cards_per_90 = ifelse(is.na(red_cards_per_90), 0, red_cards_per_90),
+    threat_per_90 = ifelse(is.na(threat_per_90), 0, threat_per_90),
+    influence_per_90 = ifelse(is.na(influence_per_90), 0, influence_per_90),
+    creativity_per_90 = ifelse(is.na(creativity_per_90), 0, creativity_per_90),
+    own_goals_per_90 = ifelse(is.na(own_goals_per_90), 0, own_goals_per_90),
+    yellow_cards_per_90 = ifelse(is.na(yellow_cards_per_90), 0, yellow_cards_per_90)
+  )
 
 # look at the missing values again, they have been cleaned
-missing_values <- apply(is.na(model_data), 2, sum)
+missing_values <- apply(is.na(train_data), 2, sum)
 missing_values
 ```
 
@@ -195,7 +202,7 @@ convert categorical column to numerical values.
 convert logical columns to numerical values.
 
 ```{r covert_to_numerical}
-model_data <- model_data %>%
+train_data <- train_data %>%
   # convert categorical column to numerical values
   mutate(
     position = ifelse(position == "GKP", 1,
@@ -215,9 +222,6 @@ model_data <- model_data %>%
   )
 ```
 
-## Pearson Correlation
-
-## REF
 
 # Classification
 
@@ -226,16 +230,16 @@ model_data <- model_data %>%
 add a target column
 
 ```{r target}
-model_data <- model_data %>%
-  # create target column
+train_data <- train_data %>%
+  # create target column, 1 represents offensive player, 0 represents defensive player
   mutate(
-    player_type = ifelse(position == "GKP" |
-                           position == "DEF", "Defensive", "Offensive"),
+    player_type = ifelse(position == 1 |
+                           position == 2, 0, 1),
     .before = position
   ) %>%
   select(-position)
 
-knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
+knitr::kable(train_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
 
@@ -243,36 +247,12 @@ knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns
 
 offensive and defensive
 
-## Split data into 2 sets
-```{r split data}
-#do a 90/10 split to form the training and test sets.
-set.seed(500)
-fortrain <- runif(nrow(model_data)) < 0.9
-train <- model_data[fortrain,]
-test <- model_data[!fortrain,]
-#
-```
-
-## Single Variable
-- Single variable predictions model: feature
-```{r Single variable predictions}
-mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
-  pPos <- sum(outCol == pos) / length(outCol)
-  naTab <- table(as.factor(outCol[is.na(varCol)]))
-  pPosWna <- (naTab / sum(naTab))[pos]
-  vTab <- table(as.factor(outCol),varCol)
-  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
-  pred <- pPosWv[appCol]
-  pred[is.na(appCol)] <- pPosWna
-  pred[is.na(pred)] <- pPos
-  pred
-}
-```
-
-
 # Feature Selection
 
 Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
+
+
+## normalization, standerisation
 
 ## Feature Selection Methods
 
@@ -282,8 +262,9 @@ Since our dataset contains both categorical and numerical features, we cannot us
 
 ```{r RFE}
 
-features <- model_data[, c("Points", "Cost", "Minutes", "Goals", "xG", "Assists", "xA", "GC", "xGC", "CS")]
-target <- fpl_data$Label
+features <- train_data %>% 
+  select(-c("player_type"))
+target <- train_data$player_type
 
 # Specify the number of desired features to select
 num_features <- 3
@@ -302,6 +283,24 @@ rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
 # Get the selected features
 selected_features <- rfe_result$optVariables
 ```
+
+
+## Single Variable
+- Single variable predictions model: feature
+```{r Single variable predictions}
+mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
+  pPos <- sum(outCol == pos) / length(outCol)
+  naTab <- table(as.factor(outCol[is.na(varCol)]))
+  pPosWna <- (naTab / sum(naTab))[pos]
+  vTab <- table(as.factor(outCol),varCol)
+  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
+  pred <- pPosWv[appCol]
+  pred[is.na(appCol)] <- pPosWna
+  pred[is.na(pred)] <- pPos
+  pred
+}
+```
+
 
 ## Multiple Variables
 
