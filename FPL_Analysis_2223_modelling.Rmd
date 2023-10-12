@@ -191,48 +191,6 @@ missing_values <- apply(is.na(model_data), 2, sum)
 missing_values
 ```
 
-convert categorical column to numerical values. convert logical columns to numerical values.
-
-<!-- ```{r covert_to_numerical} -->
-
-<!-- train_data <- train_data %>% -->
-
-<!--   # convert categorical column to numerical values -->
-
-<!--   mutate( -->
-
-<!--     position = ifelse(position == "GKP", 1, -->
-
-<!--                       ifelse(position == "DEF", 2, -->
-
-<!--                              ifelse(position == "MID", 3, 4))) -->
-
-<!--   ) %>% -->
-
-<!--   # convert logical columns to numerical values -->
-
-<!--   mutate( -->
-
-<!--     penalties_order = ifelse(penalties_order == TRUE, 1, 0), -->
-
-<!--     direct_freekicks_order = ifelse(direct_freekicks_order == TRUE, 1, 0), -->
-
-<!--     corners_and_indirect_freekicks_order = ifelse(corners_and_indirect_freekicks_order == TRUE, 1, 0) -->
-
-<!--     ) %>%  -->
-
-<!--   rename( -->
-
-<!--     penalties_taker = "penalties_order", -->
-
-<!--     direct_freekicks_taker = "direct_freekicks_order", -->
-
-<!--     corners_and_indirect_freekicks_taker = "corners_and_indirect_freekicks_order" -->
-
-<!--   ) -->
-
-<!-- ``` -->
-
 ## Target Value
 
 add a target column
@@ -294,9 +252,11 @@ model_data %>%
   theme(legend.position = "none")
 ```
 
-
-
 ## Split data into 2 sets
+
+> When working with a small dataset, it is generally recommended to prioritize maximizing the amount of data available for training the model. Splitting the small dataset into three separate sets (train, validation, and test) may further reduce the amount of data available for training, which can negatively impact model performance.
+
+> In such cases, it is often more appropriate to perform a simple train-test split without a separate validation set. This allows you to allocate a larger portion of the dataset for training the model, while still retaining a subset for evaluation purposes.
 
 ```{r split data}
 #do a 90/10 split to form the training and test sets.
@@ -348,9 +308,13 @@ mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
 
 #### LogLikelyhood
 ```{r loglikelyhood}
-
-
+logLikelihood <- function(ypred, ytrue) {
+  sum(ifelse(ytrue, log(ypred), log(1-ypred)), na.rm=T)
+}
 ```
+
+#### Null model 
+
 
 ## Feature Selection
 
