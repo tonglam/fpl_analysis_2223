@@ -307,9 +307,10 @@ test_data <- model_data[!fortrain,]
 
 #prepare the data for modelling
 outCol <- names(train_data)[-1]
-outCome <- 'player_type'
+outcome <- 'player_type'
+pos.label <- 'Offensive'
 
-#divid data into numerical and categorical
+#divide data into numerical and categorical
 vars <- setdiff(outCol, c('player_type'))
 catVars <- vars[sapply(train_data[, vars], class) %in%
 c('factor', 'character')]
@@ -327,30 +328,30 @@ c('numeric', 'integer')]
 offensive and defensive
 
 ## Single Variable
-- Single variable predictions model: feature
-```{r Single variable predictions}
-mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
-  pPos <- sum(outCol == pos) / length(outCol)
-  naTab <- table(as.factor(outCol[is.na(varCol)]))
-  pPosWna <- (naTab / sum(naTab))[pos]
-  vTab <- table(as.factor(outCol),varCol)
-  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
-  pred <- pPosWv[appCol]
-  pred[is.na(appCol)] <- pPosWna
-  pred[is.na(pred)] <- pPos
-  pred
-}
-```
+
 
 
 ## Null Model and Single Variable Model Evaluation
 
 
-#### LogLikelyhood
-```{r loglikelyhood}
+#### LogLikelihood
 
-
+```{r loglikelihood}
+# Define compute function - likelihood
+logLikelihood <- function(ypred, ytrue) {
+  sum(ifelse(ytrue, log(ypred), log(1-ypred)), na.rm=T)
+}
 ```
+- Evaluate the performance by loglikelihood
+```{r}
+# Compute the likelihood of the Null model on the test data
+logNull <- logLikelihood(sum(test_data[,outcome]==pos.label)/nrow(test_data), test_data[,outcome]==pos.label)
+
+cat("The log likelihood of the Null model is:", logNull)
+## The log likelihood of the Null model is: -1178.017
+```
+
+
 
 ## Feature Selection
 
@@ -396,16 +397,14 @@ rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
 selected_features <- rfe_result$optVariables
 ```
 
-## Single Variable
+## Single Variable Model Build
 
-### For Categorical
+### AUC
 
-- Create a function for single variable predictions
+- Create a predict function for categorical
 
-```{r Single variable predictions}
-pos <- '1'
-outCol <- names(train_data)[-1]
-varCol <- 
+```{r Single variable predictions: categorical}
+
 mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
   pPos <- sum(outCol == pos) / length(outCol)
   naTab <- table(as.factor(outCol[is.na(varCol)]))
@@ -422,17 +421,17 @@ mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
 ```{r}
 # call the predict function for the candidate columns
 for(v in catVars) {
-  pi <- paste('pred', v, sep='')
-  dTrain[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dTrain[,v])
-  dCal[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dCal[,v])
-  dTest[,pi] <- mkPredC(dTrain[,outcome], dTrain[,v], dTest[,v])
+  pi <- paste('pred_', v, sep='')
+  train_data[,pi] <- mkPredC(train_data[,'player_type'], train_data[,v], train_data[,v])
+  test_data[,pi] <- mkPredC(train_data[,'player_type'], train_data[,v], test_data[,v])
 }
 ```
 
-- Evaluate the performance of each single variable model by AUC
+- Evaluate the categorical performance by AUC
 
-```{r}
-calcAUC <- function(predcol, outcol) {
+```{r AUC calculate function}
+#Define compute function - AUC
+calcAUC <- function(predcol, outcol,pos=pos.label) {
   perf <- performance(prediction(predcol, outcol == pos), 'auc')
   as.numeric(perf@y.values)
 }
@@ -440,35 +439,75 @@ calcAUC <- function(predcol, outcol) {
 
 ```{r}
 for(v in catVars) {
-  pi <- paste('pred', v, sep = '')
-  aucTrain <- calcAUC(dTrain[, pi], dTrain[, outcome])
-  if (aucTrain >= 0.8) {
-    aucCal <- calcAUC(dCal[, pi], dCal[, outcome])
+  pi <- paste('pred_', v, sep = '')
+  aucTrain <- calcAUC(train_data[, pi], train_data[, "player_type"])
+    aucTest <- calcAUC(test_data[,pi], test_data[,"player_type"])
     print(sprintf(
-      "%s: trainAUC: %4.3f; calibrationAUC: %4.3f",
-      pi,
-      aucTrain,
-      aucCal
+      "%s: trainAUC: %4.3f; TestAUC: %4.3f",
+      pi, aucTrain, aucTest
     ))
-  }
 }
 ```
+- further explore the AUC values of two example categorical columns
 
-(type later: explanation for result here) 
-### For Numerical
-- Create a function for single variable predictions
 ```{r}
+plot
+```
+
+The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
+
+### Numerical
+- Create a predict function for numerical 
+```{r Single variable predictions: numerical}
 mkPredN <- function(outCol, varCol, appCol) {
-# compute the cuts
 cuts <- unique(
 quantile(varCol, probs=seq(0, 1, 0.1), na.rm=T))
-# discretize the numerical columns
 varC <- cut(varCol,cuts)
 appC <- cut(appCol,cuts)
 mkPredC(outCol,varC,appC)
 }
 ```
-- Evaluate the performance of each single variable model by AUC
+- Evaluate the performance by AUC
+```{r}
+#create a list to store the result
+result_tribble <- tribble(~ pred, ~ trainAUC, ~ testAUC)
+for (v in numericVars) {
+  pi <- paste('pred_', v, sep = '')
+  train_data[, pi] <-
+    mkPredN(train_data[, 'player_type'], train_data[, v], train_data[, v])
+  test_data[, pi] <-
+    mkPredN(train_data[, 'player_type'], train_data[, v], test_data[, v])
+  aucTrain <- calcAUC(train_data[, pi], train_data[, 'player_type'])
+  
+  if (aucTrain >= 0.4) {
+    aucTest <- calcAUC(test_data[, pi], test_data[, 'player_type'])
+    result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
+                      pi, aucTrain, aucTest)
+    result_tribble <- add_row(result_tribble, pred = result, trainAUC = aucTrain, testAUC = aucTest)
+  }
+}
+# Sort the result based on aucTrain value
+result_tribble <- arrange(result_tribble, desc(trainAUC), desc(testAUC))
+result_tribble
+```
+- further explore the AUC values of two example numerical columns
+
+### likelihood ratio test
+```{r }
+# store the top performing categorical variables.
+selCatVars <- c()
+minDrop <- 3  # may need to adjust this number
+for (v in catVars) {
+  pi <- paste('pred_', v, sep='')
+  devDrop <- 2*(logLikelihood(test_data[,pi], test_data[,outcome]==pos.label) - logNull)
+  if (devDrop >= minDrop) {
+    cat(sprintf("%6s, deviance reduction: %g\n", v, devDrop))
+    selCatVars <- c(selCatVars, pi)
+  }
+}
+
+```
+
 
 ## Multiple Variables
 
