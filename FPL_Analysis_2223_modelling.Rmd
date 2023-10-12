@@ -304,7 +304,17 @@ set.seed(500)
 fortrain <- runif(nrow(model_data)) < 0.9
 train_data <- model_data[fortrain,]
 test_data <- model_data[!fortrain,]
-#
+
+#prepare the data for modelling
+outCol <- names(train_data)[-1]
+outCome <- 'player_type'
+
+#divid data into numerical and categorical
+vars <- setdiff(outCol, c('player_type'))
+catVars <- vars[sapply(train_data[, vars], class) %in%
+c('factor', 'character')]
+numericVars <- vars[sapply(train_data[, vars], class) %in%
+c('numeric', 'integer')]
 ```
 
 
