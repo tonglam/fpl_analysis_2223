@@ -49,6 +49,7 @@ model_data <- fpl_raw_data %>%
   select(
     -c(
       "id",
+      "team",
       "name",
       "now_cost",
       "transfers_out",
@@ -96,22 +97,30 @@ missing_values_sum <- colSums(is.na(model_data) > 0)
 missing_values_cols <- missing_values_sum[missing_values_sum > 0]
 missing_values_cols
 # convert missing values columns to categorical variables, True represent not missing and False represent missing
-convert_order_to_name <- function(value) {
-  case_when(
-            value == 1 ~ "First",
-            value == 2 ~ "Second",
-            value == 3 ~ "Thrid",
-            .default = "No")
-}
-
 model_data <- model_data %>%
   mutate(
-    corners_and_indirect_freekicks_order = convert_order_to_name(corners_and_indirect_freekicks_order),
-    penalties_order = convert_order_to_name(penalties_order),
-    direct_freekicks_order = convert_order_to_name(direct_freekicks_order)
+    corners_and_indirect_freekicks_order = ifelse(is.na(corners_and_indirect_freekicks_order), "Non-Taker", "Taker"),
+    penalties_order = ifelse(is.na(penalties_order), "Non-Taker", "Taker"),
+    direct_freekicks_order = ifelse(is.na(direct_freekicks_order), "Non-Taker", "Taker")
   )
 # check missing values again
 sum(is.na(model_data))
+```
+## Target Value
+
+add a target column
+
+```{r target}
+model_data <- model_data %>%
+  # create target column, 1 represents offensive player, 0 represents defensive player
+  mutate(
+    player_type = ifelse(position == 1 |
+                           position == 2, 0, 1),
+    .before = position
+  ) %>%
+  select(-position)
+
+knitr::kable(train_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
 ## Split data into 2 sets
@@ -253,42 +262,63 @@ convert categorical column to numerical values. convert logical columns to numer
 
 # Classification
 
-## Target Value
+### plot target value
+```{r plot target value}
+# plot target value
 
-add a target column
 
-```{r target}
-train_data <- train_data %>%
-  # create target column, 1 represents offensive player, 0 represents defensive player
-  mutate(
-    player_type = ifelse(position == 1 |
-                           position == 2, 0, 1),
-    .before = position
-  ) %>%
-  select(-position)
 
-knitr::kable(train_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
 ## Binary Classification Problem
 
 offensive and defensive
 
-# Feature Selection
+## Single Variable
+- Single variable predictions model: feature
+```{r Single variable predictions}
+mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
+  pPos <- sum(outCol == pos) / length(outCol)
+  naTab <- table(as.factor(outCol[is.na(varCol)]))
+  pPosWna <- (naTab / sum(naTab))[pos]
+  vTab <- table(as.factor(outCol),varCol)
+  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
+  pred <- pPosWv[appCol]
+  pred[is.na(appCol)] <- pPosWna
+  pred[is.na(pred)] <- pPos
+  pred
+}
+```
 
-Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
 
-```{r}
+## Null Model and Single Variable Model Evaluation
+
+
+#### LogLikelyhood
+```{r loglikelyhood}
+
 
 ```
 
-## normalization, standerisation
+## Feature Selection
 
-## Feature Selection Methods
+Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
+
+
+
+### Feature Selection Methods
 
 Since our dataset contains both categorical and numerical features, we cannot use simple filter methods such as Pearson Correlation or Chi-Square Test to select features. Because they work only in categorical variables and numerical variables respectively. Instead, we will use the following methods to select features.
 
-### Recursive Feature Elimination - Wrapped Methods
+> A key part of building many variable models is selecting what variables to use. Each
+variable we use represents a chance of explaining more of the outcome variation (a
+chance of building a better model), but also represents a possible source of noise and
+overfitting. To control this effect, we often preselect which subset of variables we’ll use
+to fit.
+
+> Practical Data Science With R
+
+#### Recursive Feature Elimination - Wrapped Methods
 
 ```{r RFE}
 
