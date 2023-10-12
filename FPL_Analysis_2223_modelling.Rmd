@@ -81,8 +81,8 @@ model_data <- fpl_raw_data %>%
   select(-ends_with("rank")) %>%
   select(-ends_with("rank_type"))
 
-str(model_data)
-summary(model_data)
+# str(model_data)
+# summary(model_data)
 
 # remove raw data
 rm(fpl_raw_data)
@@ -159,8 +159,8 @@ model_data <- model_data %>%
     )
   )
 
-str(model_data)
-summary(model_data)
+# str(model_data)
+# summary(model_data)
 ```
 
 ### Features that were removed
@@ -190,48 +190,6 @@ model_data <- model_data %>%
 missing_values <- apply(is.na(model_data), 2, sum)
 missing_values
 ```
-
-convert categorical column to numerical values. convert logical columns to numerical values.
-
-<!-- ```{r covert_to_numerical} -->
-
-<!-- train_data <- train_data %>% -->
-
-<!--   # convert categorical column to numerical values -->
-
-<!--   mutate( -->
-
-<!--     position = ifelse(position == "GKP", 1, -->
-
-<!--                       ifelse(position == "DEF", 2, -->
-
-<!--                              ifelse(position == "MID", 3, 4))) -->
-
-<!--   ) %>% -->
-
-<!--   # convert logical columns to numerical values -->
-
-<!--   mutate( -->
-
-<!--     penalties_order = ifelse(penalties_order == TRUE, 1, 0), -->
-
-<!--     direct_freekicks_order = ifelse(direct_freekicks_order == TRUE, 1, 0), -->
-
-<!--     corners_and_indirect_freekicks_order = ifelse(corners_and_indirect_freekicks_order == TRUE, 1, 0) -->
-
-<!--     ) %>%  -->
-
-<!--   rename( -->
-
-<!--     penalties_taker = "penalties_order", -->
-
-<!--     direct_freekicks_taker = "direct_freekicks_order", -->
-
-<!--     corners_and_indirect_freekicks_taker = "corners_and_indirect_freekicks_order" -->
-
-<!--   ) -->
-
-<!-- ``` -->
 
 ## Target Value
 
@@ -294,9 +252,11 @@ model_data %>%
   theme(legend.position = "none")
 ```
 
-
-
 ## Split data into 2 sets
+
+> When working with a small dataset, it is generally recommended to prioritize maximizing the amount of data available for training the model. Splitting the small dataset into three separate sets (train, validation, and test) may further reduce the amount of data available for training, which can negatively impact model performance.
+
+> In such cases, it is often more appropriate to perform a simple train-test split without a separate validation set. This allows you to allocate a larger portion of the dataset for training the model, while still retaining a subset for evaluation purposes.
 
 ```{r split data}
 #do a 90/10 split to form the training and test sets.
@@ -333,7 +293,6 @@ offensive and defensive
 
 ## Null Model and Single Variable Model Evaluation
 
-
 #### LogLikelihood
 
 ```{r loglikelihood}
@@ -342,7 +301,9 @@ logLikelihood <- function(ypred, ytrue) {
   sum(ifelse(ytrue, log(ypred), log(1-ypred)), na.rm=T)
 }
 ```
-- Evaluate the performance by loglikelihood
+
+- Evaluate the performance by log likelihood
+
 ```{r}
 # Compute the likelihood of the Null model on the test data
 logNull <- logLikelihood(sum(test_data[,outcome]==pos.label)/nrow(test_data), test_data[,outcome]==pos.label)
@@ -350,7 +311,6 @@ logNull <- logLikelihood(sum(test_data[,outcome]==pos.label)/nrow(test_data), te
 cat("The log likelihood of the Null model is:", logNull)
 ## The log likelihood of the Null model is: -1178.017
 ```
-
 
 
 ## Feature Selection
@@ -448,6 +408,7 @@ for(v in catVars) {
     ))
 }
 ```
+
 - further explore the AUC values of two example categorical columns
 
 ```{r}
@@ -457,7 +418,8 @@ plot
 The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
 
 ### Numerical
-- Create a predict function for numerical 
+- Create a predict function for numerical
+
 ```{r Single variable predictions: numerical}
 mkPredN <- function(outCol, varCol, appCol) {
 cuts <- unique(
@@ -467,7 +429,9 @@ appC <- cut(appCol,cuts)
 mkPredC(outCol,varC,appC)
 }
 ```
+
 - Evaluate the performance by AUC
+
 ```{r}
 #create a list to store the result
 result_tribble <- tribble(~ pred, ~ trainAUC, ~ testAUC)
@@ -490,9 +454,11 @@ for (v in numericVars) {
 result_tribble <- arrange(result_tribble, desc(trainAUC), desc(testAUC))
 result_tribble
 ```
+
 - further explore the AUC values of two example numerical columns
 
 ### likelihood ratio test
+
 ```{r }
 # store the top performing categorical variables.
 selCatVars <- c()
