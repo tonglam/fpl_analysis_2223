@@ -22,7 +22,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(knitr)
 library(hrbrthemes)
-library(RColorBrewer)
 library(gridExtra)
 library(caret)
 library(rpart)
@@ -85,7 +84,7 @@ str(model_data)
 summary(model_data)
 
 # remove raw data
-rm(fpl_raw_data)
+# rm(fpl_raw_data)
 ```
 
 ## Handle Missing Values
@@ -107,6 +106,54 @@ model_data <- model_data %>%
 # check missing values again
 sum(is.na(model_data))
 ```
+## Target Value
+
+add a target column
+
+```{r target}
+model_data <- model_data %>%
+  # create target column, 1 represents offensive player, 0 represents defensive player
+  mutate(
+    player_type = ifelse(position == 1 |
+                           position == 2, 0, 1),
+    .before = position
+  ) %>%
+  select(-position)
+
+knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
+```
+
+### plot target value
+```{r plot target value}
+# plot target value
+
+
+
+```
+
+
+## Split data into 2 sets
+
+```{r split data}
+#do a 90/10 split to form the training and test sets.
+set.seed(500)
+fortrain <- runif(nrow(model_data)) < 0.9
+train_data <- model_data[fortrain,]
+test_data <- model_data[!fortrain,]
+
+#prepare the data for modelling
+outCol <- names(train_data)[-1]
+outCome <- 'player_type'
+
+#divid data into numerical and categorical
+vars <- setdiff(outCol, c('player_type'))
+catVars <- vars[sapply(train_data[, vars], class) %in%
+c('factor', 'character')]
+numericVars <- vars[sapply(train_data[, vars], class) %in%
+c('numeric', 'integer')]
+
+
+```
 
 ## Future Engineering
 
@@ -115,7 +162,7 @@ drop Position Column because it is highly correlated with the label column, like
 Then, we should covert the label column to numerical values, 1 present offensive, 0 present defensive.
 
 ```{r transform_2, results='hide'}
-model_data <- model_data %>%
+train_data <- train_data %>%
   # drop highly correlated columns, if a variable has per 90 values, remain per 90 values instead of the origin ones because they are more useful for further analysis
   select(
     -c(
@@ -159,8 +206,8 @@ model_data <- model_data %>%
     )
   )
 
-str(model_data)
-summary(model_data)
+str(train_data)
+summary(train_data)
 ```
 
 ### Features that were removed
@@ -169,12 +216,12 @@ summary(model_data)
 
 ```{r missing_values_2}
 # count missing values
-missing_values <- apply(is.na(model_data), 2, sum)
+missing_values <- apply(is.na(train_data), 2, sum)
 na_values <- which(missing_values > 0)
 na_values
 # if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
 # if the expected 90 values are NaN, it means that the player did not play a single minute
-model_data <- model_data %>%
+train_data <- train_data %>%
   mutate(
     assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
     goals_scored_per_90 = ifelse(is.na(goals_scored_per_90), 0, goals_scored_per_90),
@@ -187,7 +234,7 @@ model_data <- model_data %>%
   )
 
 # look at the missing values again, they have been cleaned
-missing_values <- apply(is.na(model_data), 2, sum)
+missing_values <- apply(is.na(train_data), 2, sum)
 missing_values
 ```
 
@@ -233,82 +280,6 @@ convert categorical column to numerical values. convert logical columns to numer
 
 <!-- ``` -->
 
-## Target Value
-
-add a target column
-
-```{r target}
-model_data <- model_data %>%
-  # create target column, 1 represents offensive player, 0 represents defensive player
-  mutate(player_type = ifelse(position == 'GKP' |
-                                position == 'DEF', "Defensive", "Offensive"),
-         .before = position) %>%
-  select(-position)
-
-knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
-```
-
-### plot target value
-```{r target_value_barplot}
-# plot target value
-model_data %>% 
-  ggplot(aes(x = player_type, fill = player_type)) +
-  geom_bar(alpha = 0.8, width = 0.8) +
-  geom_label(stat = "count", aes(label = ..count..), show.legend = F) +
-  theme_ipsum() +
-  scale_fill_brewer(palette = "Set1")
-```
-
-```{r target_value_donut}
-model_data %>%
-  mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>% 
-  group_by(player_type) %>%
-  summarise(count = n()) %>%
-  mutate(
-    percentage = count / sum(count),
-    ymax = cumsum(percentage),
-    ymin = c(0, head(ymax, n = -1)),
-    labelPosition = (ymax + ymin) / 2,
-    label = paste(ifelse(player_type == 0, 'Defensive' , 'Offensive'),
-                  "\n",
-                  round(percentage * 100, 2),
-                  "%",
-                  sep = "")
-  ) %>%
-  ggplot(aes(
-    ymax = ymax,
-    ymin = ymin,
-    xmax = 4,
-    xmin = 3,
-    fill = as.factor(player_type)
-  )) +
-  geom_rect() +
-  coord_polar(theta = "y") +
-  geom_label(x = 3.5,
-             aes(y = labelPosition, label = label),
-             size = 4) +
-  scale_fill_brewer(palette = 4) +
-  scale_color_brewer(palette = 3) +
-  xlim(c(2, 4)) +
-  theme_void() +
-  theme(legend.position = "none")
-```
-
-
-
-## Split data into 2 sets
-
-```{r split data}
-#do a 90/10 split to form the training and test sets.
-set.seed(500)
-fortrain <- runif(nrow(model_data)) < 0.9
-train_data <- model_data[fortrain,]
-test_data <- model_data[!fortrain,]
-#
-```
-
-
-
 
 # Classification
 
@@ -317,7 +288,7 @@ test_data <- model_data[!fortrain,]
 offensive and defensive
 
 ## Single Variable
-- Single variable predictions model: feature
+- Single variable predictions model
 ```{r Single variable predictions}
 mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
   pPos <- sum(outCol == pos) / length(outCol)
