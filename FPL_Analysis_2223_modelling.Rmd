@@ -35,8 +35,7 @@ library(ROCR)
 ## Read Data
 
 ```{r read_data, message=FALSE}
-path <- "./FPL_Dataset_2022-2023.csv"
-fpl_raw_data <- read.csv(path)
+fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
 ```
 
 # Data Preprocessing
@@ -95,19 +94,21 @@ rm(fpl_raw_data)
 sum(is.na(model_data))
 # check which columns have missing values
 missing_values_sum <- colSums(is.na(model_data) > 0)
-missing_values_cols <- missing_values_sum[missing_values_sum > 0]
-missing_values_cols
+missing_values_sum[missing_values_sum > 0]
 # convert missing values columns to categorical variables, True represent not missing and False represent missing
 model_data <- model_data %>%
   mutate(
-    corners_and_indirect_freekicks_order = ifelse(is.na(corners_and_indirect_freekicks_order), "Non-Taker", "Taker"),
+    corners_and_indirect_freekicks_order = ifelse(
+      is.na(corners_and_indirect_freekicks_order),
+      "Non-Taker",
+      "Taker"
+    ),
     penalties_order = ifelse(is.na(penalties_order), "Non-Taker", "Taker"),
     direct_freekicks_order = ifelse(is.na(direct_freekicks_order), "Non-Taker", "Taker")
   )
 # check missing values again
 sum(is.na(model_data))
 ```
-
 ## Future Engineering
 
 drop Position Column because it is highly correlated with the label column, like we just used it to create the label column.
@@ -130,14 +131,16 @@ model_data <- model_data %>%
     )
   ) %>%
   # transform other performance variable to per 90 values
-  mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>% 
-  mutate(goals_scored_per_90 = goals_scored / minutes * 90, .after = goals_scored) %>%
+  mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>%
+  mutate(goals_scored_per_90 = goals_scored / minutes * 90,
+         .after = goals_scored) %>%
   mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
   mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
   mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
   mutate(creativity_per_90 = creativity / minutes * 90, .after = creativity) %>%
   mutate(own_goals_per_90 = own_goals / minutes * 90, .after = own_goals) %>%
-  mutate(yellow_cards_per_90 = yellow_cards / minutes * 90, .after = yellow_cards) %>%
+  mutate(yellow_cards_per_90 = yellow_cards / minutes * 90,
+         .after = yellow_cards) %>%
   # drop the origin columns
   select(
     -c(
@@ -149,15 +152,12 @@ model_data <- model_data %>%
       "creativity",
       "own_goals",
       "yellow_cards"
-    )) %>% 
-  # drop columns highly correlated with the some other columns
-  select(
-    -c(
-      "penalties_missed",
-      "penalties_saved",
-      "ict_index"
     )
-  )
+  ) %>%
+  # drop columns highly correlated with the some other columns
+  select(-c("penalties_missed",
+            "penalties_saved",
+            "ict_index"))
 
 # str(model_data)
 # summary(model_data)
@@ -170,8 +170,7 @@ model_data <- model_data %>%
 ```{r missing_values_2}
 # count missing values
 missing_values <- apply(is.na(model_data), 2, sum)
-na_values <- which(missing_values > 0)
-na_values
+which(missing_values > 0)
 # if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
 # if the expected 90 values are NaN, it means that the player did not play a single minute
 model_data <- model_data %>%
@@ -187,8 +186,7 @@ model_data <- model_data %>%
   )
 
 # look at the missing values again, they have been cleaned
-missing_values <- apply(is.na(model_data), 2, sum)
-missing_values
+apply(is.na(model_data), 2, sum)
 ```
 
 ## Target Value
@@ -198,28 +196,31 @@ add a target column
 ```{r target}
 model_data <- model_data %>%
   # create target column, 1 represents offensive player, 0 represents defensive player
-  mutate(player_type = ifelse(position == 'GKP' |
-                                position == 'DEF', "Defensive", "Offensive"),
-         .before = position) %>%
+  mutate(
+    player_type = ifelse(position == 'GKP' |
+                           position == 'DEF', "Defensive", "Offensive"),
+    .before = position
+  ) %>%
   select(-position)
 
-knitr::kable(model_data[1:5, 1:5], caption =  "First 5 rows and first 5 conlumns of data")
+knitr::kable(model_data[1:5,], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
 ### plot target value
 ```{r target_value_barplot}
-# plot target value
-model_data %>% 
+model_data %>%
   ggplot(aes(x = player_type, fill = player_type)) +
   geom_bar(alpha = 0.8, width = 0.8) +
-  geom_label(stat = "count", aes(label = ..count..), show.legend = F) +
+  geom_label(stat = "count",
+             aes(label = ..count..),
+             show.legend = F) +
   theme_ipsum() +
   scale_fill_brewer(palette = "Set1")
 ```
 
 ```{r target_value_donut}
 model_data %>%
-  mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>% 
+  mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>%
   group_by(player_type) %>%
   summarise(count = n()) %>%
   mutate(
@@ -227,11 +228,13 @@ model_data %>%
     ymax = cumsum(percentage),
     ymin = c(0, head(ymax, n = -1)),
     labelPosition = (ymax + ymin) / 2,
-    label = paste(ifelse(player_type == 0, 'Defensive' , 'Offensive'),
-                  "\n",
-                  round(percentage * 100, 2),
-                  "%",
-                  sep = "")
+    label = paste(
+      ifelse(player_type == 0, 'Defensive' , 'Offensive'),
+      "\n",
+      round(percentage * 100, 2),
+      "%",
+      sep = ""
+    )
   ) %>%
   ggplot(aes(
     ymax = ymax,
@@ -258,28 +261,25 @@ model_data %>%
 
 > In such cases, it is often more appropriate to perform a simple train-test split without a separate validation set. This allows you to allocate a larger portion of the dataset for training the model, while still retaining a subset for evaluation purposes.
 
-```{r split data}
-#do a 90/10 split to form the training and test sets.
+```{r split_data}
+# do a 90/10 split to form the training and test sets.
 set.seed(500)
 fortrain <- runif(nrow(model_data)) < 0.9
 train_data <- model_data[fortrain,]
-test_data <- model_data[!fortrain,]
+test_data <- model_data[-fortrain,]
 
-#prepare the data for modelling
+# prepare the data for modelling
 outCol <- names(train_data)[-1]
 outcome <- 'player_type'
 pos.label <- 'Offensive'
 
-#divide data into numerical and categorical
+# divide data into numerical and categorical
 vars <- setdiff(outCol, c('player_type'))
-catVars <- vars[sapply(train_data[, vars], class) %in%
-c('factor', 'character')]
-numericVars <- vars[sapply(train_data[, vars], class) %in%
-c('numeric', 'integer')]
+catVars <-
+  vars[sapply(train_data[, vars], class) %in% c('factor', 'character')]
+numericVars <-
+  vars[sapply(train_data[, vars], class) %in% c('numeric', 'integer')]
 ```
-
-
-
 
 # Classification
 
@@ -289,35 +289,214 @@ offensive and defensive
 
 ## Single Variable
 
-
-
 ## Null Model and Single Variable Model Evaluation
 
 #### LogLikelihood
 
-```{r loglikelihood}
-# Define compute function - likelihood
+```{r calculate_log_likelihood}
+# define compute function - likelihood
 logLikelihood <- function(ypred, ytrue) {
-  sum(ifelse(ytrue, log(ypred), log(1-ypred)), na.rm=T)
+  sum(ifelse(ytrue, log(ypred), log(1 - ypred)), na.rm = T)
 }
 ```
 
 - Evaluate the performance by log likelihood
 
-```{r}
+```{r null_log_likelihood}
 # Compute the likelihood of the Null model on the test data
-logNull <- logLikelihood(sum(test_data[,outcome]==pos.label)/nrow(test_data), test_data[,outcome]==pos.label)
+logNull <-
+  logLikelihood(sum(test_data[, outcome] == pos.label) / nrow(test_data),
+                test_data[, outcome] == pos.label)
 
 cat("The log likelihood of the Null model is:", logNull)
-## The log likelihood of the Null model is: -1178.017
+## The log likelihood of the Null model is: -534.1338
 ```
 
+## Single Variable Model Build
+
+### AUC
+
+- Create a predict function for categorical
+
+```{r catogorical_predictions}
+mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
+  pPos <- sum(outCol == pos) / length(outCol)
+  naTab <- table(as.factor(outCol[is.na(varCol)]))
+  pPosWna <- (naTab / sum(naTab))[pos]
+  vTab <- table(as.factor(outCol), varCol)
+  pPosWv <- (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+  pred <- pPosWv[appCol]
+  pred[is.na(appCol)] <- pPosWna
+  pred[is.na(pred)] <- pPos
+  pred
+}
+```
+
+```{r call_categorical_prediction}
+# call the predict function for the candidate columns
+for (v in catVars) {
+  pi <- paste('pred_', v, sep = '')
+  train_data[, pi] <-
+    mkPredC(train_data[, 'player_type'], train_data[, v], train_data[, v])
+  test_data[, pi] <-
+    mkPredC(train_data[, 'player_type'], train_data[, v], test_data[, v])
+}
+```
+
+- Evaluate the categorical performance by AUC
+
+```{r calculate_AUC}
+# define compute function - AUC
+calcAUC <- function(predcol, outcol, pos = pos.label) {
+  perf <- performance(prediction(predcol, outcol == pos), 'auc')
+  as.numeric(perf@y.values)
+}
+```
+
+```{r call_categorical_AUC}
+catResult <- tribble(~ pred, ~ trainAUC, ~ testAUC)
+
+for (v in catVars) {
+  pi <- paste('pred_', v, sep = '')
+  aucTrain <- calcAUC(train_data[, pi], train_data[, "player_type"])
+  aucTest <- calcAUC(test_data[, pi], test_data[, "player_type"])
+  result <- print(sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
+                          pi, aucTrain, aucTest))
+  catResult <-
+    add_row(catResult,
+            pred = result,
+            trainAUC = aucTrain,
+            testAUC = aucTest)
+}
+
+# sort by train AUC desc, then test AUC desc
+catResult <- arrange(catResult, desc(trainAUC), desc(testAUC))
+catResult
+```
+
+- further explore the AUC values of two example categorical columns
+
+```{r}
+plot
+```
+
+The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
+
+### Numerical
+- Create a predict function for numerical
+
+```{r numerical_predictions}
+mkPredN <- function(outCol, varCol, appCol) {
+  cuts <- unique(quantile(varCol, probs = seq(0, 1, 0.1), na.rm = T))
+  varC <- cut(varCol, cuts)
+  appC <- cut(appCol, cuts)
+  mkPredC(outCol, varC, appC)
+}
+```
+
+- Evaluate the performance by AUC
+
+```{r call_numerical_AUC}
+# create a list to store the result
+numResult <- tribble(~ pred, ~ trainAUC, ~ testAUC)
+
+for (v in numericVars) {
+  pi <- paste('pred_', v, sep = '')
+  train_data[, pi] <-
+    mkPredN(train_data[, 'player_type'], train_data[, v], train_data[, v])
+  test_data[, pi] <-
+    mkPredN(train_data[, 'player_type'], train_data[, v], test_data[, v])
+  aucTrain <- calcAUC(train_data[, pi], train_data[, 'player_type'])
+  
+  if (aucTrain >= 0.4) {
+    aucTest <- calcAUC(test_data[, pi], test_data[, 'player_type'])
+    result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
+                      pi, aucTrain, aucTest)
+    numResult <-
+      add_row(numResult,
+              pred = result,
+              trainAUC = aucTrain,
+              testAUC = aucTest)
+  }
+}
+
+# sort by train AUC desc, then test AUC desc
+numResult <- arrange(numResult, desc(trainAUC), desc(testAUC))
+numResult
+```
+
+- further explore the AUC values of two example numerical columns
+
+### likelihood ratio test
+
+```{r calculate_categorical_likelihood}
+# store the top performing categorical variables.
+selCatResult <- tribble( ~ pred, ~ deviance)
+
+minDrop <- 30  # may need to adjust this number
+for (v in catVars) {
+  pi <- paste('pred_', v, sep = '')
+  devDrop <-
+    2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
+  if (devDrop >= minDrop) {
+    result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
+    selCatResult <-
+      add_row(selCatResult,
+              pred = result,
+              deviance = devDrop)
+  }
+}
+
+# sort by deviance desc
+selCatResult <- arrange(selCatResult, desc(deviance))
+selCatResult
+```
+
+```{r calculate_numerical_likelihood}
+# separate the expected and actual numerical columns
+expectedVars <- numericVars[str_detect(numericVars, 'expected')]
+actualVars <- str_replace(expectedVars, "expected_", "")
+observeVars <- c(expectedVars, actualVars)
+
+# store the top performing categorical variables.
+selNumResult <- tribble( ~ pred, ~ deviance)
+observe_selNumResult <- tribble( ~ pred, ~ deviance)
+observe_selNumResult
+
+minDrop <- 10  # may need to adjust this number
+for (v in numericVars) {
+  v
+  pi <- paste('pred_', v, sep = '')
+  devDrop <-
+    2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
+  if (devDrop >= minDrop) {
+    result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
+    selNumResult <-
+      add_row(selNumResult,
+              pred = result,
+              deviance = devDrop)
+    if (v %in% observeVars) {
+      observe_selNumResult <- add_row(observe_selNumResult,
+                                       pred = result,
+                                       deviance = devDrop)
+    }
+  }
+}
+
+# sort by deviance desc
+selNumResult <- arrange(selNumResult, desc(deviance))
+selNumResult
+observe_selNumResult <- arrange(observe_selNumResult, desc(deviance))
+observe_selNumResult
+
+# drop actual variable
+numericVars = numericVars[!numericVars %in% observeVars]
+numericVars
+```
 
 ## Feature Selection
 
 Feature selection is typically carried out to identify the most relevant features from a larger set of available features. This process helps improve the performance of the classification model by reducing dimensionality, eliminating irrelevant or redundant features, and enhancing interpretability.
-
-
 
 ### Feature Selection Methods
 
@@ -355,123 +534,6 @@ rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
 
 # Get the selected features
 selected_features <- rfe_result$optVariables
-```
-
-## Single Variable Model Build
-
-### AUC
-
-- Create a predict function for categorical
-
-```{r Single variable predictions: categorical}
-
-mkPredC <- function(outCol,varCol,appCol, pos=pos.label) {
-  pPos <- sum(outCol == pos) / length(outCol)
-  naTab <- table(as.factor(outCol[is.na(varCol)]))
-  pPosWna <- (naTab / sum(naTab))[pos]
-  vTab <- table(as.factor(outCol),varCol)
-  pPosWv <- (vTab[pos,]+1.0e-3 * pPos) / (colSums(vTab)+1.0e-3)
-  pred <- pPosWv[appCol]
-  pred[is.na(appCol)] <- pPosWna
-  pred[is.na(pred)] <- pPos
-  pred
-}
-```
-
-```{r}
-# call the predict function for the candidate columns
-for(v in catVars) {
-  pi <- paste('pred_', v, sep='')
-  train_data[,pi] <- mkPredC(train_data[,'player_type'], train_data[,v], train_data[,v])
-  test_data[,pi] <- mkPredC(train_data[,'player_type'], train_data[,v], test_data[,v])
-}
-```
-
-- Evaluate the categorical performance by AUC
-
-```{r AUC calculate function}
-#Define compute function - AUC
-calcAUC <- function(predcol, outcol,pos=pos.label) {
-  perf <- performance(prediction(predcol, outcol == pos), 'auc')
-  as.numeric(perf@y.values)
-}
-```
-
-```{r}
-for(v in catVars) {
-  pi <- paste('pred_', v, sep = '')
-  aucTrain <- calcAUC(train_data[, pi], train_data[, "player_type"])
-    aucTest <- calcAUC(test_data[,pi], test_data[,"player_type"])
-    print(sprintf(
-      "%s: trainAUC: %4.3f; TestAUC: %4.3f",
-      pi, aucTrain, aucTest
-    ))
-}
-```
-
-- further explore the AUC values of two example categorical columns
-
-```{r}
-plot
-```
-
-The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
-
-### Numerical
-- Create a predict function for numerical
-
-```{r Single variable predictions: numerical}
-mkPredN <- function(outCol, varCol, appCol) {
-cuts <- unique(
-quantile(varCol, probs=seq(0, 1, 0.1), na.rm=T))
-varC <- cut(varCol,cuts)
-appC <- cut(appCol,cuts)
-mkPredC(outCol,varC,appC)
-}
-```
-
-- Evaluate the performance by AUC
-
-```{r}
-#create a list to store the result
-result_tribble <- tribble(~ pred, ~ trainAUC, ~ testAUC)
-for (v in numericVars) {
-  pi <- paste('pred_', v, sep = '')
-  train_data[, pi] <-
-    mkPredN(train_data[, 'player_type'], train_data[, v], train_data[, v])
-  test_data[, pi] <-
-    mkPredN(train_data[, 'player_type'], train_data[, v], test_data[, v])
-  aucTrain <- calcAUC(train_data[, pi], train_data[, 'player_type'])
-  
-  if (aucTrain >= 0.4) {
-    aucTest <- calcAUC(test_data[, pi], test_data[, 'player_type'])
-    result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
-                      pi, aucTrain, aucTest)
-    result_tribble <- add_row(result_tribble, pred = result, trainAUC = aucTrain, testAUC = aucTest)
-  }
-}
-# Sort the result based on aucTrain value
-result_tribble <- arrange(result_tribble, desc(trainAUC), desc(testAUC))
-result_tribble
-```
-
-- further explore the AUC values of two example numerical columns
-
-### likelihood ratio test
-
-```{r }
-# store the top performing categorical variables.
-selCatVars <- c()
-minDrop <- 3  # may need to adjust this number
-for (v in catVars) {
-  pi <- paste('pred_', v, sep='')
-  devDrop <- 2*(logLikelihood(test_data[,pi], test_data[,outcome]==pos.label) - logNull)
-  if (devDrop >= minDrop) {
-    cat(sprintf("%6s, deviance reduction: %g\n", v, devDrop))
-    selCatVars <- c(selCatVars, pi)
-  }
-}
-
 ```
 
 
