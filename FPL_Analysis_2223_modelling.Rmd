@@ -27,8 +27,6 @@ library(gridExtra)
 library(caret)
 library(rpart)
 library(rpart.plot)
-library(randomForest)
-library(dendextend)
 library(ROCR)
 library(ROCit)
 library(pander)
@@ -128,14 +126,15 @@ model_data <- model_data %>%
       "expected_goals_conceded",
       "saves",
       "expected_goal_involvements",
-      "expected_goals",
-      "goals_conceded"
+      "expected_goals"
     )
   ) %>%
   # transform other performance variable to per 90 values
   mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>%
-  mutate(goals_scored_per_90 = goals_scored / minutes * 90,
+  mutate(goals_per_90 = goals_scored / minutes * 90,
          .after = goals_scored) %>%
+  mutate(goals_conceded_per_90 = goals_conceded / minutes * 90,
+         .after = goals_conceded) %>% 
   mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
   mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
   mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
@@ -178,7 +177,8 @@ which(missing_values > 0)
 model_data <- model_data %>%
   mutate(
     assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
-    goals_scored_per_90 = ifelse(is.na(goals_scored_per_90), 0, goals_scored_per_90),
+    goals_per_90 = ifelse(is.na(goals_per_90), 0, goals_per_90),
+    goals_conceded_per_90 = ifelse(is.na(goals_conceded_per_90), 0, goals_conceded_per_90),
     red_cards_per_90 = ifelse(is.na(red_cards_per_90), 0, red_cards_per_90),
     threat_per_90 = ifelse(is.na(threat_per_90), 0, threat_per_90),
     influence_per_90 = ifelse(is.na(influence_per_90), 0, influence_per_90),
@@ -188,7 +188,8 @@ model_data <- model_data %>%
   )
 
 # look at the missing values again, they have been cleaned
-apply(is.na(model_data), 2, sum)
+missing_values <- apply(is.na(model_data), 2, sum)
+missing_values
 ```
 
 ## Target Value
@@ -268,7 +269,7 @@ model_data %>%
 set.seed(500)
 fortrain <- runif(nrow(model_data)) < 0.9
 train_data <- model_data[fortrain,]
-test_data <- model_data[-fortrain,]
+test_data <- model_data[!fortrain,]
 
 # prepare the data for modelling
 outCol <- names(train_data)[-1]
@@ -352,7 +353,16 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
   perf <- performance(prediction(predcol, outcol == pos), 'auc')
   as.numeric(perf@y.values)
 }
+
+# define plot function - AUC
+plotAUC <- function(data, target, feature) {
+ data %>%
+  ggplot(aes(x = data[[feature]], color = as.factor(target))) + 
+  geom_density() +
+  xlab(feature)
+}
 ```
+
 
 ```{r call_categorical_AUC}
 catResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
@@ -361,8 +371,8 @@ for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   aucTrain <- calcAUC(train_data[, pi], train_data[, "player_type"])
   aucTest <- calcAUC(test_data[, pi], test_data[, "player_type"])
-  result <- print(sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
-                          pi, aucTrain, aucTest))
+  result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
+                          pi, aucTrain, aucTest)
   catResult <-
     add_row(catResult,
             feature = pi,
@@ -379,10 +389,10 @@ catResult
 - further explore the AUC values of the above categorical columns
 
 ```{r  density plot for AUC values (categorical)}
-catAUC1 <- ggplot(test_data) + geom_density(aes(x=pred_penalties_order, color=as.factor(player_type)))
-catAUC2 <- ggplot(test_data) + geom_density(aes(x=pred_corners_and_indirect_freekicks_order, color=as.factor(player_type)))
-catAUC3 <- ggplot(test_data) + geom_density(aes(x=pred_direct_freekicks_order, color=as.factor(player_type)))
-grid.arrange(catAUC1, catAUC2,catAUC3, ncol=2)
+catAUC1 <- plotAUC(test_data, test_data$player_type, "pred_penalties_order")
+catAUC2 <- plotAUC(test_data, test_data$player_type, "pred_corners_and_indirect_freekicks_order")
+catAUC3 <- plotAUC(test_data, test_data$player_type, "pred_direct_freekicks_order")
+grid.arrange(catAUC1, catAUC2, catAUC3, ncol = 2)
 ```
 
 The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
@@ -403,7 +413,7 @@ mkPredN <- function(outCol, varCol, appCol) {
 
 ```{r call_numerical_AUC}
 # create a list to store the result
-numResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
+numResult <- tribble( ~ feature, ~ pred, ~ trainAUC, ~ testAUC)
 
 for (v in numericVars) {
   pi <- paste('pred_', v, sep = '')
@@ -418,11 +428,13 @@ for (v in numericVars) {
     result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
                       pi, aucTrain, aucTest)
     numResult <-
-      add_row(numResult,
-              feature = pi,
-              pred = result,
-              trainAUC = aucTrain,
-              testAUC = aucTest)
+      add_row(
+        numResult,
+        feature = pi,
+        pred = result,
+        trainAUC = aucTrain,
+        testAUC = aucTest
+      )
   }
 }
 
@@ -433,13 +445,7 @@ numResult
 
 - further explore the AUC values of the above numerical columns
 ```{r  density plot for AUC values (numerical)}
-#define a function - plotting
-nAUCplot <- function(data, target, colName) {
-  p <- ggplot(data) + geom_density(aes(x = data[, colName], color = as.factor(target)))
-  return(p)
-}
-
-#define a function - get the column name
+# define a function - get the column name
 extract_column <- function(tribble, column) {
   colunm_name <- pull(tribble, {
     {
@@ -449,29 +455,44 @@ extract_column <- function(tribble, column) {
   result <- paste(colunm_name, collapse = ", ")
   return(result)
 }
-#call the functions to plot the density plot
+
+# call the functions to plot the density plot
 Nplotlist <- list()
 Ncol <- str_split(extract_column(numResult, "feature"), ", ")[[1]]
-for (col in Ncol) {
-  plot <- nAUCplot(test_data, test_data$player_type, col)
-  # grid.arrange(plot,ncol = 2)
-  Nplotlist <- c(Nplotlist, plot)
+for (col in Ncol[1:6]) {
+  plot <- plotAUC(test_data, test_data$player_type, col)
+  Nplotlist <- c(Nplotlist, list(plot))
+
 }
 
-grid.arrange(grobs= Nplotlist,ncol = 2)
+grid.arrange(grobs = Nplotlist, ncol = 2)
 ```
 - Compare the ROC
 ```{r the ROC for numerical variables}
-#define a function - ROC curve
-plot_roc <- function(predcol, outcol, colour_id=2, overlaid=F) {
-ROCit_obj <- rocit(score=predcol, class=outcol==pos.label)
-par(new=overlaid)
-plot(ROCit_obj, col = c(colour_id, 1),
-legend = FALSE, YIndex = FALSE, values = FALSE)
+# define a function - ROC curve
+plot_roc <- function(predcol,
+                     outcol,
+                     colour_id = 2,
+                     overlaid = F) {
+  ROCit_obj <- rocit(score = predcol, class = outcol == pos.label)
+  par(new = overlaid)
+  plot(
+    ROCit_obj,
+    col = c(colour_id, 1),
+    legend = FALSE,
+    YIndex = FALSE,
+    values = FALSE
+  )
 }
 
-plot_roc(test_data$pred_expected_goal_involvements_per_90, test_data[,outcome]) 
-plot_roc(test_data$pred_direct_freekicks_order, test_data[,outcome], colour_id=4, overlaid=T)
+plot_roc(test_data$pred_expected_goal_involvements_per_90,
+         test_data[, target])
+plot_roc(
+  test_data$pred_direct_freekicks_order,
+  test_data[, target],
+  colour_id = 4,
+  overlaid = T
+)
 ```
 
 
@@ -480,9 +501,9 @@ plot_roc(test_data$pred_direct_freekicks_order, test_data[,outcome], colour_id=4
 
 ```{r calculate_categorical_likelihood}
 # store the top performing categorical variables.
-select_cat_result <- tribble( ~ feature,  ~ pred, ~ deviance)
+select_cat_result <- tribble(~ feature,  ~ pred, ~ deviance)
 
-minDrop <- 30  # may need to adjust this number
+minDrop <- 10  # may need to adjust this number
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   devDrop <-
@@ -507,12 +528,12 @@ select_cat_result
 ```{r calculate_numerical_likelihood}
 # separate the expected and actual numerical columns
 expectedVars <- numericVars[str_detect(numericVars, 'expected')]
-actualVars <- c("assists_per_90", "goals_scored_per_90", "goals_conceded_per_90")
+actualVars <- str_replace(expectedVars, "expected_", "")
 observeVars <- c(expectedVars, actualVars)
 
 # store the top performing categorical variables.
-sel_num_result <- tribble(~ feature, ~ pred, ~ deviance)
-observe_selNumResult <- tribble(~ feature, ~ pred, ~ deviance)
+sel_num_result <- tribble( ~ feature, ~ pred, ~ deviance)
+observe_selNumResult <- tribble( ~ feature, ~ pred, ~ deviance)
 
 minDrop <- 10  # may need to adjust this number
 for (v in numericVars) {
@@ -542,14 +563,15 @@ for (v in numericVars) {
 
 # sort by deviance desc
 sel_num_result <- arrange(sel_num_result, desc(deviance))
-sel_num_result
+sel_num_result$pred
 observe_selNumResult <-
   arrange(observe_selNumResult, desc(deviance))
-observe_selNumResult
+observe_selNumResult$pred
 
 # drop actual variable
-sel_num_result <- sel_num_result %>% filter(!feature %in% actualVars)
-sel_num_result
+sel_num_result <-
+  sel_num_result %>% filter(!feature %in% actualVars)
+numericVars <- numericVars[!numericVars %in% actualVars]
 ```
 
 ## Feature Selection
@@ -596,19 +618,19 @@ combined_features
 #### Recursive Feature Elimination - Wrapped Methods
 
 ```{r RFE}
-# train_data <- train_data %>% mutate(player_type = ifelse(player_type == "Defensive", 0, 1))
+# train_data <- train_data %>% mutate(player_type = as.factor(player_type))
+rfe_train_data <- train_data %>% 
+  select(all_of(c(target, catVars, numericVars))) %>% 
+  mutate(player_type = as.factor(player_type))
 
-ctrl <- rfeControl(
-  functions = rfFuncs,
-  method = "cv",
-  number = 10
-)
-
-rfe_result <- rfe(x = train_data[, 2:41], y = train_data[, 1], sizes=c(1:40), rfeControl = ctrl)
-rfe_result
-
-# Get the selected features
-# selected_features <- rfe_result$optVariables
+result <- rfe(rfe_train_data[, -which(names(rfe_train_data) == target)],
+              rfe_train_data[, target],
+              sizes = c(1:4),
+              rfeControl = rfeControl(functions = rfFuncs),
+              method = "repeatedcv",
+              verbose = FALSE)
+rfe_features <- result$optVariables[1:6]
+rfe_features
 ```
 
 
