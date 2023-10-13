@@ -30,6 +30,7 @@ library(rpart.plot)
 library(randomForest)
 library(dendextend)
 library(ROCR)
+library(ROCit)
 ```
 
 ## Read Data
@@ -354,7 +355,7 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 ```
 
 ```{r call_categorical_AUC}
-catResult <- tribble(~ pred, ~ trainAUC, ~ testAUC)
+catResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
 
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
@@ -364,6 +365,7 @@ for (v in catVars) {
                           pi, aucTrain, aucTest))
   catResult <-
     add_row(catResult,
+            feature = pi,
             pred = result,
             trainAUC = aucTrain,
             testAUC = aucTest)
@@ -374,10 +376,13 @@ catResult <- arrange(catResult, desc(trainAUC), desc(testAUC))
 catResult
 ```
 
-- further explore the AUC values of two example categorical columns
+- further explore the AUC values of the above categorical columns
 
-```{r}
-plot
+```{r  density plot for AUC values (categorical)}
+catAUC1 <- ggplot(test_data) + geom_density(aes(x=pred_penalties_order, color=as.factor(player_type)))
+catAUC2 <- ggplot(test_data) + geom_density(aes(x=corners_and_indirect_freekicks_order, color=as.factor(player_type)))
+catAUC3 <- ggplot(test_data) + geom_density(aes(x=pred_direct_freekicks_order, color=as.factor(player_type)))
+grid.arrange(catAUC1, catAUC2,catAUC3, ncol=2)
 ```
 
 The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
@@ -398,7 +403,7 @@ mkPredN <- function(outCol, varCol, appCol) {
 
 ```{r call_numerical_AUC}
 # create a list to store the result
-numResult <- tribble(~ pred, ~ trainAUC, ~ testAUC)
+numResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
 
 for (v in numericVars) {
   pi <- paste('pred_', v, sep = '')
@@ -414,6 +419,7 @@ for (v in numericVars) {
                       pi, aucTrain, aucTest)
     numResult <-
       add_row(numResult,
+              feature = pi,
               pred = result,
               trainAUC = aucTrain,
               testAUC = aucTest)
@@ -425,7 +431,50 @@ numResult <- arrange(numResult, desc(trainAUC), desc(testAUC))
 numResult
 ```
 
-- further explore the AUC values of two example numerical columns
+- further explore the AUC values of the above numerical columns
+```{r  density plot for AUC values (numerical)}
+#define a function - plotting
+nAUCplot <- function(data, target, colName) {
+  p <- ggplot(data) + geom_density(aes(x = data[, colName], color = as.factor(target)))
+  return(p)
+}
+
+#define a function - get the column name
+extract_column <- function(tribble, column) {
+  colunm_name <- pull(tribble, {
+    {
+      column
+    }
+  })
+  result <- paste(colunm_name, collapse = ", ")
+  return(result)
+}
+#call the functions to plot the density plot
+Nplotlist <- list()
+Ncol <- str_split(extract_column(numResult, "feature"), ", ")[[1]]
+for (col in Ncol) {
+  plot <- nAUCplot(test_data, test_data$player_type, col)
+  # grid.arrange(plot,ncol = 2)
+  Nplotlist <- c(Nplotlist, plot)
+}
+
+grid.arrange(grobs= Nplotlist,ncol = 2)
+```
+- Compare the ROC
+```{r the ROC for numerical variables}
+#define a function - ROC curve
+plot_roc <- function(predcol, outcol, colour_id=2, overlaid=F) {
+ROCit_obj <- rocit(score=predcol, class=outcol==pos.label)
+par(new=overlaid)
+plot(ROCit_obj, col = c(colour_id, 1),
+legend = FALSE, YIndex = FALSE, values = FALSE)
+}
+
+plot_roc(test_data$pred_expected_goal_involvements_per_90, test_data[,outcome]) 
+plot_roc(test_data$pred_direct_freekicks_order, test_data[,outcome], colour_id=4, overlaid=T)
+```
+
+
 
 ### likelihood ratio test
 
@@ -574,12 +623,57 @@ selected_features <- rfe_result$optVariables
 ## Multiple Variables
 
 ### Decision Tree
+- Build decision tree for all variables
+```{r decision_tree}
+fV <- paste(outcome,' ~',
+paste(c(catVars, numericVars), collapse=' + '),
+sep='')
+
+tmodel <- rpart(fV, data=train_data)
+rpart.plot(tmodel)
+```
+- Performance Measures
+```{r performance_measures}
+#AUC sc
+fV <- paste(outcome,'>0 ~',
+paste(c(catVars, numericVars), collapse=' + '),
+sep='')
+tmodel <- rpart(fV, data=train_data)
+
+print(calcAUC(predict(tmodel, newdata=train_data), train_data[,outcome]))
+```
+
+
+- Build decision tree for selected variables
+
 
 ### Random Forest
 
 ### XGBoost
+```{r}
+
+```
+
 
 ## Models Evaluation
+
+### Confusion Matrix
+```{r}
+# 设置新的阈值
+threshold.value = 0.7  # 例如，将阈值设为0.7
+
+# 根据阈值将预测的类别重新分配
+predicted_classes <- ifelse(train_data$pred_expected_goal_involvements_per_90 >= threshold.value, 1, 0)
+
+# 计算混淆矩阵
+confusion_matrix <- confusionMatrix(predicted_classes, train_data$expected_goal_involvements_per_90)
+
+# 输出混淆矩阵
+print(confusion_matrix)
+
+
+```
+
 
 ## Explaining Models using LIME
 
