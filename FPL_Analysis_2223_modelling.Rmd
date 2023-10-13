@@ -31,6 +31,7 @@ library(randomForest)
 library(dendextend)
 library(ROCR)
 library(ROCit)
+library(pander)
 ```
 
 ## Read Data
@@ -315,11 +316,10 @@ cat("The log likelihood of the Null model is:", logNull)
 
 ## Single Variable Model Build
 
-### AUC
-
+### Categorical
 - Create a predict function for categorical
 
-```{r catogorical_predictions}
+```{r categorical_predictions}
 mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   pPos <- sum(outCol == pos) / length(outCol)
   naTab <- table(as.factor(outCol[is.na(varCol)]))
@@ -380,7 +380,7 @@ catResult
 
 ```{r  density plot for AUC values (categorical)}
 catAUC1 <- ggplot(test_data) + geom_density(aes(x=pred_penalties_order, color=as.factor(player_type)))
-catAUC2 <- ggplot(test_data) + geom_density(aes(x=corners_and_indirect_freekicks_order, color=as.factor(player_type)))
+catAUC2 <- ggplot(test_data) + geom_density(aes(x=pred_corners_and_indirect_freekicks_order, color=as.factor(player_type)))
 catAUC3 <- ggplot(test_data) + geom_density(aes(x=pred_direct_freekicks_order, color=as.factor(player_type)))
 grid.arrange(catAUC1, catAUC2,catAUC3, ncol=2)
 ```
@@ -617,22 +617,53 @@ rfe_result
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
-fV <- paste(outcome,' ~',
-paste(c(catVars, numericVars), collapse=' + '),
-sep='')
+fV <- paste(outcome,' ~',paste(c(catVars, numericVars), collapse=' + '), sep='')
 
 tmodel <- rpart(fV, data=train_data)
 rpart.plot(tmodel)
 ```
 - Performance Measures
-```{r performance_measures}
-#AUC sc
-fV <- paste(outcome,'>0 ~',
-paste(c(catVars, numericVars), collapse=' + '),
-sep='')
+```{r AUC}
+#AUC score
+fV <- paste(outcome,'>0 ~',paste(c(catVars, numericVars), collapse=' + '),sep='')
 tmodel <- rpart(fV, data=train_data)
 
 print(calcAUC(predict(tmodel, newdata=train_data), train_data[,outcome]))
+```
+
+```{r confusion_matrix}
+#Create a Confusion Matrix function
+performanceMeasures <- function(pred, truth, name = "model") {
+   ctable <- table(truth = truth, pred = (pred > 0.5))
+   accuracy <- sum(diag(ctable)) / sum(ctable)
+   precision <- ctable[2, 2] / sum(ctable[, 2])
+   recall <- ctable[2, 2] / sum(ctable[2, ])
+   f1 <- 2 * precision * recall / (precision + recall)
+   data.frame(model = name, precision = precision,
+              recall = recall,
+              f1 = f1, accuracy = accuracy)
+}
+
+pretty_perf_table <- function(model,train_data,test_data) {
+  # setting up Pander Options
+  panderOptions("plain.ascii", TRUE)
+  panderOptions("keep.trailing.zeros", TRUE)
+  panderOptions("table.style", "simple")
+  perf_justify <- "lrrrr"
+  # comparing performance on training vs. test
+  pred_train <- predict(model, newdata=train_data)
+  truth_train <- train_data[, outcome]
+  pred_test <- predict(model, newdata=test_data)
+  truth_test <- test_data[, outcome]
+  trainperf_tree <- performanceMeasures(
+      pred_train, truth_train, "logistic, training")
+  testperf_tree <- performanceMeasures(
+      pred_test, truth_test, "logistic, test")
+  perftable <- rbind(trainperf_tree, testperf_tree)
+  pandoc.table(perftable, justify = perf_justify)
+}
+
+pretty_perf_table(tmodel, train_data, test_data)
 ```
 
 
