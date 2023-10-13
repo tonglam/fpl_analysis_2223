@@ -271,7 +271,7 @@ test_data <- model_data[-fortrain,]
 
 # prepare the data for modelling
 outCol <- names(train_data)[-1]
-outcome <- 'player_type'
+target <- 'player_type'
 pos.label <- 'Offensive'
 
 # divide data into numerical and categorical
@@ -306,8 +306,8 @@ logLikelihood <- function(ypred, ytrue) {
 ```{r null_log_likelihood}
 # Compute the likelihood of the Null model on the test data
 logNull <-
-  logLikelihood(sum(test_data[, outcome] == pos.label) / nrow(test_data),
-                test_data[, outcome] == pos.label)
+  logLikelihood(sum(test_data[, target] == pos.label) / nrow(test_data),
+                test_data[, target] == pos.label)
 
 cat("The log likelihood of the Null model is:", logNull)
 ## The log likelihood of the Null model is: -534.1338
@@ -486,7 +486,7 @@ minDrop <- 30  # may need to adjust this number
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   devDrop <-
-    2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
+    2 * (logLikelihood(test_data[, pi], test_data[, target] == pos.label) - logNull)
   if (devDrop >= minDrop) {
     result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
     select_cat_result <-
@@ -519,7 +519,7 @@ for (v in numericVars) {
   v
   pi <- paste('pred_', v, sep = '')
   devDrop <-
-    2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
+    2 * (logLikelihood(test_data[, pi], test_data[, target] == pos.label) - logNull)
   if (devDrop >= minDrop) {
     result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
     sel_num_result <-
@@ -596,27 +596,19 @@ combined_features
 #### Recursive Feature Elimination - Wrapped Methods
 
 ```{r RFE}
+# train_data <- train_data %>% mutate(player_type = ifelse(player_type == "Defensive", 0, 1))
 
-features <- train_data %>% 
-  select(-c("player_type"))
-target <- train_data$player_type
-
-# Specify the number of desired features to select
-num_features <- 3
-
-# Create the RFE control object
 ctrl <- rfeControl(
-  functions = rfFuncs,  # Use decision tree as the learning algorithm
-  method = "cv",  # Cross-validation method
-  number = 5,  # Number of folds for cross-validation
-  verbose = FALSE
+  functions = rfFuncs,
+  method = "cv",
+  number = 10
 )
 
-# Perform feature selection using RFE
-rfe_result <- rfe(features, target, sizes = num_features, rfeControl = ctrl)
+rfe_result <- rfe(x = train_data[, 2:41], y = train_data[, 1], sizes=c(1:40), rfeControl = ctrl)
+rfe_result
 
 # Get the selected features
-selected_features <- rfe_result$optVariables
+# selected_features <- rfe_result$optVariables
 ```
 
 
