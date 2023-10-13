@@ -639,7 +639,7 @@ rfe_features
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
-fV <- paste(outcome,' ~',paste(c(catVars, numericVars), collapse=' + '), sep='')
+fV <- paste(target,' ~',paste(c(catVars, numericVars), collapse=' + '), sep='')
 
 tmodel <- rpart(fV, data=train_data)
 rpart.plot(tmodel)
@@ -647,10 +647,10 @@ rpart.plot(tmodel)
 - Performance Measures
 ```{r AUC}
 #AUC score
-fV <- paste(outcome,'>0 ~',paste(c(catVars, numericVars), collapse=' + '),sep='')
+fV <- paste(target,'>0 ~',paste(c(catVars, numericVars), collapse=' + '),sep='')
 tmodel <- rpart(fV, data=train_data)
 
-print(calcAUC(predict(tmodel, newdata=train_data), train_data[,outcome]))
+print(calcAUC(predict(tmodel, newdata=train_data), train_data[, target]))
 ```
 
 ```{r confusion_matrix}
@@ -674,9 +674,9 @@ pretty_perf_table <- function(model,train_data,test_data) {
   perf_justify <- "lrrrr"
   # comparing performance on training vs. test
   pred_train <- predict(model, newdata=train_data)
-  truth_train <- train_data[, outcome]
+  truth_train <- train_data[, target]
   pred_test <- predict(model, newdata=test_data)
-  truth_test <- test_data[, outcome]
+  truth_test <- test_data[, target]
   trainperf_tree <- performanceMeasures(
       pred_train, truth_train, "logistic, training")
   testperf_tree <- performanceMeasures(
