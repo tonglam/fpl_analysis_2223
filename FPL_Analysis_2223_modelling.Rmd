@@ -431,7 +431,7 @@ numResult
 
 ```{r calculate_categorical_likelihood}
 # store the top performing categorical variables.
-selCatResult <- tribble( ~ pred, ~ deviance)
+select_cat_result <- tribble( ~ feature,  ~ pred, ~ deviance)
 
 minDrop <- 30  # may need to adjust this number
 for (v in catVars) {
@@ -440,28 +440,30 @@ for (v in catVars) {
     2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
   if (devDrop >= minDrop) {
     result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
-    selCatResult <-
-      add_row(selCatResult,
-              pred = result,
-              deviance = devDrop)
+    select_cat_result <-
+      add_row(
+        select_cat_result,
+        feature = v,
+        pred = result,
+        deviance = devDrop
+      )
   }
 }
 
 # sort by deviance desc
-selCatResult <- arrange(selCatResult, desc(deviance))
-selCatResult
+select_cat_result <- arrange(select_cat_result, desc(deviance))
+select_cat_result
 ```
 
 ```{r calculate_numerical_likelihood}
 # separate the expected and actual numerical columns
 expectedVars <- numericVars[str_detect(numericVars, 'expected')]
-actualVars <- str_replace(expectedVars, "expected_", "")
+actualVars <- c("assists_per_90", "goals_scored_per_90", "goals_conceded_per_90")
 observeVars <- c(expectedVars, actualVars)
 
 # store the top performing categorical variables.
-selNumResult <- tribble( ~ pred, ~ deviance)
-observe_selNumResult <- tribble( ~ pred, ~ deviance)
-observe_selNumResult
+sel_num_result <- tribble(~ feature, ~ pred, ~ deviance)
+observe_selNumResult <- tribble(~ feature, ~ pred, ~ deviance)
 
 minDrop <- 10  # may need to adjust this number
 for (v in numericVars) {
@@ -471,27 +473,34 @@ for (v in numericVars) {
     2 * (logLikelihood(test_data[, pi], test_data[, outcome] == pos.label) - logNull)
   if (devDrop >= minDrop) {
     result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
-    selNumResult <-
-      add_row(selNumResult,
-              pred = result,
-              deviance = devDrop)
+    sel_num_result <-
+      add_row(
+        sel_num_result,
+        feature = v,
+        pred = result,
+        deviance = devDrop
+      )
     if (v %in% observeVars) {
-      observe_selNumResult <- add_row(observe_selNumResult,
-                                       pred = result,
-                                       deviance = devDrop)
+      observe_selNumResult <- add_row(
+        observe_selNumResult,
+        feature = v,
+        pred = result,
+        deviance = devDrop
+      )
     }
   }
 }
 
 # sort by deviance desc
-selNumResult <- arrange(selNumResult, desc(deviance))
-selNumResult
-observe_selNumResult <- arrange(observe_selNumResult, desc(deviance))
+sel_num_result <- arrange(sel_num_result, desc(deviance))
+sel_num_result
+observe_selNumResult <-
+  arrange(observe_selNumResult, desc(deviance))
 observe_selNumResult
 
 # drop actual variable
-numericVars = numericVars[!numericVars %in% observeVars]
-numericVars
+sel_num_result <- sel_num_result %>% filter(!feature %in% actualVars)
+sel_num_result
 ```
 
 ## Feature Selection
@@ -509,6 +518,31 @@ overfitting. To control this effect, we often preselect which subset of variable
 to fit.
 
 > Practical Data Science With R
+
+### Concatenation Top-performance Features
+
+From the previous section, we have identified the following features that have good performance in predicting the target variable.
+
+```{r feature_concatenation}
+extract_column <- function(tribble, column) {
+  colunm_name <- pull(tribble, {
+    {
+      column
+    }
+  })
+  result <- paste(colunm_name, collapse = ", ")
+  return(result)
+}
+
+combined_features <-
+  paste(
+    extract_column(select_cat_result, feature),
+    extract_column(sel_num_result, feature),
+    sep = ", "
+  )
+
+combined_features
+```
 
 #### Recursive Feature Elimination - Wrapped Methods
 
@@ -545,6 +579,16 @@ selected_features <- rfe_result$optVariables
 
 ### XGBoost
 
-## Module Evaluation
+## Models Evaluation
+
+## Explaining Models using LIME
+
+### Decision Tree Model
+
+## XGBoost Model
+
+## Discussion
+
+## Conclusion
 
 # Cluster
