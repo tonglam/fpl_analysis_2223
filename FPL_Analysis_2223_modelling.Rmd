@@ -636,12 +636,6 @@ rfe_features
 
 ## Multiple Variables
 
-calcAUC <- function(predcol, outcol, pos = pos.label) {
-  perf <- performance(prediction(predcol, outcol == pos), 'auc')
-  as.numeric(perf@y.values)
-}
-
-
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
