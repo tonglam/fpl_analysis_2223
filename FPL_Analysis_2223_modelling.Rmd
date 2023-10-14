@@ -649,8 +649,11 @@ rpart.plot(tmodel)
 
 - Performance Measures
 ```{r AUC}
+#AUC score
+fV <- paste(target,'>0 ~',paste(c(catVars, numericVars), collapse=' + '),sep='')
+tmodel <- rpart(fV, data=train_data)
 
-print(calcAUC(predict(tmodel, newdata=train_data), train_data[,target]))
+print(calcAUC(predict(tmodel, newdata=train_data), train_data[, target]))
 ```
 
 ```{r confusion_matrix}
