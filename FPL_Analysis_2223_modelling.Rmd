@@ -636,13 +636,36 @@ rfe_features
 
 ## Multiple Variables
 
+calcAUC <- function(predcol, outcol, pos = pos.label) {
+  perf <- performance(prediction(predcol, outcol == pos), 'auc')
+  as.numeric(perf@y.values)
+}
+
+
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
-fV <- paste(target,' ~',paste(c(catVars, numericVars), collapse=' + '), sep='')
+tree_train_data <-  train_data %>% 
+  select(all_of(c(target, catVars, numericVars))) %>% 
+  mutate(player_type = ifelse(player_type == "Offensive", 1, 0))
 
-tmodel <- rpart(fV, data=train_data)
-rpart.plot(tmodel)
+tree_test_data <- test_data %>% 
+  select(all_of(c(target, catVars, numericVars))) %>% 
+  mutate(player_type = ifelse(player_type == "Offensive", 1, 0))
+
+tmodel <- rpart(player_type ~., data=tree_train_data, method = 'class')
+
+predict <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
+
+table(tree_test_data[, target], predicted = predict)
+
+pp <- perdiction(predict, tree_test_data[, target])
+
+
+print(calcAUC(predict, tree_test_data[, target]))
+
+
+# rpart.plot(tmodel)
 ```
 - Performance Measures
 ```{r AUC}
