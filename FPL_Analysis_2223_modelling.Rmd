@@ -646,26 +646,29 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 - Build decision tree for all variables
 ```{r decision_tree}
 tree_train_data <-  train_data %>% 
-  select(all_of(c(target, catVars, numericVars))) %>% 
-  mutate(player_type = ifelse(player_type == "Offensive", 1, 0))
+  select(all_of(c(target, catVars, numericVars)))
 
 tree_test_data <- test_data %>% 
-  select(all_of(c(target, catVars, numericVars))) %>% 
-  mutate(player_type = ifelse(player_type == "Offensive", 1, 0))
+  select(all_of(c(target, catVars, numericVars)))
 
 tmodel <- rpart(player_type ~., data=tree_train_data, method = 'class')
 
+predict <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
+
+print(calcAUC(predict, train_data[, target]))
+
 predict <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
 
-table(tree_test_data[, target], predicted = predict)
 
-pp <- perdiction(predict, tree_test_data[, target])
+pp <- prediction(predict, tree_test_data[, target])
 
 
 print(calcAUC(predict, tree_test_data[, target]))
 
 
-# rpart.plot(tmodel)
+
+
+rpart.plot(tmodel)
 ```
 - Performance Measures
 ```{r AUC}
