@@ -640,7 +640,25 @@ rfe_features
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
-fV <- paste(target,' ~',paste(c(catVars, numericVars), collapse=' + '), sep='')
+tree_train_data <-  train_data %>% 
+  select(all_of(c(target, catVars, numericVars)))
+
+tree_test_data <- test_data %>% 
+  select(all_of(c(target, catVars, numericVars)))
+
+tmodel <- rpart(player_type ~., data=tree_train_data, method = 'class')
+
+predict <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
+
+print(calcAUC(predict, train_data[, target]))
+
+predict <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
+
+
+pp <- prediction(predict, tree_test_data[, target])
+
+
+print(calcAUC(predict, tree_test_data[, target]))
 
 tmodel <- rpart(fV, data=train_data,method = "class")
 rpart.plot(tmodel)
