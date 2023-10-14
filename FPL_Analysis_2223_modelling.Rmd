@@ -131,6 +131,7 @@ model_data <- model_data %>%
     )
   ) %>%
   # transform other performance variable to per 90 values
+  mutate(minutes_per_90 = minutes / 90, .after = minutes) %>%
   mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>%
   mutate(goals_per_90 = goals_scored / minutes * 90,
          .after = goals_scored) %>%
@@ -146,8 +147,10 @@ model_data <- model_data %>%
   # drop the origin columns
   select(
     -c(
+      "minutes",
       "assists",
       "goals_scored",
+      "goals_conceded",
       "red_cards",
       "threat",
       "influence",
@@ -313,7 +316,7 @@ logNull <-
                 test_data[, target] == pos.label)
 
 cat("The log likelihood of the Null model is:", logNull)
-## The log likelihood of the Null model is: -534.1338
+## The log likelihood of the Null model is: -47.80357
 ```
 
 ## Single Variable Model Build
@@ -576,16 +579,16 @@ extract_column <- function(tribble, column) {
       column
     }
   })
-  result <- paste(colunm_name, collapse = ", ")
+  result <- colunm_name
+  if (length(result) > 0) {
+    result <- paste(colunm_name, collapse = ", ")
+  }
   return(result)
 }
 
 combined_features <-
-  paste(
-    extract_column(select_cat_result, feature),
-    extract_column(sel_num_result, feature),
-    sep = ", "
-  )
+  c(extract_column(select_cat_result, feature),
+    strsplit(extract_column(sel_num_result, feature), ", ")[[1]])
 
 combined_features
 ```
@@ -593,7 +596,6 @@ combined_features
 #### Recursive Feature Elimination - Wrapped Methods
 
 ```{r RFE}
-# train_data <- train_data %>% mutate(player_type = as.factor(player_type))
 rfe_train_data <- train_data %>% 
   select(all_of(c(target, catVars, numericVars))) %>% 
   mutate(player_type = as.factor(player_type))
@@ -687,17 +689,21 @@ main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=po
 ```
 ### Decision Tree
 - Build decision tree for all variables
-```{r decision_tree}
-tree_train_data <-  train_data %>% 
-  select(all_of(c(target, catVars, numericVars)))
+```{r decision_tree_combined_1}
+tree_train_data_1 <-  train_data %>% 
+  select(all_of(c(target, combined_features)))
 
-tree_test_data <- test_data %>% 
-  select(all_of(c(target, catVars, numericVars)))
+tree_test_data_1 <- test_data %>% 
+  select(all_of(c(target, combined_features)))
 
-tmodel <- rpart(player_type ~., data=tree_train_data, method = 'class')
+tmodel <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
 
+predict <- as.numeric(predict(tmodel, newdata=tree_train_data_1, type = "class"))
 
-rpart.plot(tmodel)
+print(calcAUC(predict, tree_train_data_1[, target]))
+
+predict <- as.numeric(predict(tmodel, newdata=tree_test_data_1, type = "class"))
+
 ```
 - Performance Measures
 ```{r}
@@ -711,8 +717,6 @@ tmodel_performance <- main_performance(predict_train,predict_test,tree_train_dat
 
 ```
 
-
-
 ```{r confusion_matrix - metrics}
 #convert the target value to match the prediction value
 truth_train <- ifelse(tree_train_data$player_type == "Offensive", 1, 2)
@@ -723,6 +727,29 @@ tcm <- CM_metrics(predict_train, predict_test,truth_train, truth_test, "tmodel-T
 tcm
 ```
 
+```{r decision_tree_combined_2}
+tree_train_data_2 <-  train_data %>% 
+  select(all_of(c(target, rfe_features)))
+
+tree_test_data_2 <- test_data %>% 
+  select(all_of(c(target, rfe_features)))
+
+tmodel <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
+
+predict <- as.numeric(predict(tmodel, newdata=tree_train_data_2, type = "class"))
+
+print(calcAUC(predict, tree_train_data_2[, target]))
+
+predict <- as.numeric(predict(tmodel, newdata=tree_test_data_2, type = "class"))
+
+
+pp <- prediction(predict, tree_test_data_2[, target])
+
+
+print(calcAUC(predict, tree_test_data_2[, target]))
+
+rpart.plot(tmodel)
+```
 
 
 ```{r AUC}
@@ -745,36 +772,127 @@ table_train
 
 - Build decision tree for selected variables
 
-
-### Random Forest
-
 ### XGBoost
-```{r xgboost function} 
-#Define a function for xgboost model
-fit_iris_example = function(variable_matrix, labelvec) {
-  cv <- xgb.cv(
-    variable_matrix,
-    label = labelvec,
-    params = list(objective = "binary:logistic"),
-    nfold = 5,
-    nrounds = 100,
-    print_every_n = 10,
-    metrics = "logloss"
+
+```{r xgboost_combine_1}
+# convert categorical variables to factor
+xgb_train_data_1 <- train_data %>%
+  select(all_of(c(target, combined_features))) %>%
+  mutate(
+    type = as.numeric(player_type == 'Offensive'),
+    .after = player_type,
+    penalties_order = ifelse(penalties_order == 'Taker', 1, 0)
   )
-  
-  evalframe <- as.data.frame(cv$evaluation_log)
-  NROUNDS <- which.min(evalframe$test_logloss_mean)
-  
-  model <- xgboost(
-    data = variable_matrix,
-    label = labelvec,
-    params = list(objective = "binary:logistic"),
-    nrounds = NROUNDS,
-    verbose = FALSE
+
+xgb_test_data_1 <- test_data %>%
+  select(all_of(c(target, combined_features))) %>%
+  mutate(
+    type = as.numeric(player_type == 'Offensive'),
+    .after = player_type,
+    penalties_order = ifelse(penalties_order == 'Taker', 1, 0)
   )
-  
-  model
-}
+
+input <- as.matrix(xgb_train_data_1[-c(1, 2)])
+
+cv <- xgb.cv(
+  data = input,
+  label = xgb_train_data_1$type,
+  nrounds = 10,
+  nfold = 5,
+  print_every_n = 10,
+  metrics = "logloss"
+)
+
+evalframe <- as.data.frame(cv$evaluation_log)
+
+head(evalframe)
+
+(NROUNDS <- which.min(evalframe$test_logloss_mean))
+
+ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
+  geom_line() +
+  geom_vline(xintercept = NROUNDS,
+             color = "darkred",
+             linetype = 2) +
+  ggtitle("Cross-validated log loss as a function of ensemble size")
+
+model <- xgboost(
+  data = input,
+  label = xgb_train_data_1$type,
+  params = list(objective = "binary:logistic"),
+  nrounds = NROUNDS,
+  verbose = FALSE
+)
+
+test_input <- as.matrix(xgb_test_data_1[-c(1, 2)])
+
+pred <- predict(model, test_input)
+
+print(calcAUC(pred, xgb_test_data_1[, target]))
+
+
+
+```
+
+```{r xgboost_combine_2}
+# convert categorical variables to factor
+xgb_train_data_2 <- train_data %>%
+  select(all_of(c(target, rfe_features))) %>%
+  mutate(
+    type = as.numeric(player_type == 'Offensive'),
+    .after = player_type)
+
+xgb_test_data_2 <- test_data %>%
+  select(all_of(c(target, rfe_features))) %>%
+  mutate(
+    type = as.numeric(player_type == 'Offensive'),
+    .after = player_type)
+
+input <- as.matrix(xgb_train_data_2[-c(1, 2)])
+
+cv <- xgb.cv(
+  data = input,
+  label = xgb_train_data_2$type,
+  nrounds = 100,
+  nfold = 5,
+  print_every_n = 10,
+  metrics = "logloss"
+)
+
+evalframe <- as.data.frame(cv$evaluation_log)
+
+head(evalframe)
+
+(NROUNDS <- which.min(evalframe$test_logloss_mean))
+
+ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
+  geom_line() +
+  geom_vline(xintercept = NROUNDS,
+             color = "darkred",
+             linetype = 2) +
+  ggtitle("Cross-validated log loss as a function of ensemble size")
+
+model <- xgboost(
+  data = input,
+  label = xgb_train_data_2$type,
+  params = list(objective = "binary:logistic"),
+  nrounds = NROUNDS,
+  verbose = FALSE
+)
+
+test_input <- as.matrix(xgb_test_data_2[-c(1, 2)])
+
+pred <- predict(model, test_input)
+
+print(calcAUC(pred, xgb_test_data_2[, target]))
+
+
+
+```
+
+
+```{r xgboost_combine_2}
+
 ```
 
 ```{r}
@@ -793,6 +911,11 @@ model <- fit_iris_example(input, train_data$player_type)
 
 
 ## Explaining Models using LIME
+
+```{r LIME}
+
+```
+
 
 ### Decision Tree Model
 
