@@ -468,33 +468,7 @@ for (col in Ncol[1:6]) {
 
 grid.arrange(grobs = Nplotlist, ncol = 2)
 ```
-- Compare the ROC
-```{r the ROC for numerical variables}
-# define a function - ROC curve
-plot_roc <- function(predcol,
-                     outcol,
-                     colour_id = 2,
-                     overlaid = F) {
-  ROCit_obj <- rocit(score = predcol, class = outcol == pos.label)
-  par(new = overlaid)
-  plot(
-    ROCit_obj,
-    col = c(colour_id, 1),
-    legend = FALSE,
-    YIndex = FALSE,
-    values = FALSE
-  )
-}
 
-plot_roc(test_data$pred_expected_goal_involvements_per_90,
-         test_data[, target])
-plot_roc(
-  test_data$pred_direct_freekicks_order,
-  test_data[, target],
-  colour_id = 4,
-  overlaid = T
-)
-```
 
 
 
@@ -637,6 +611,80 @@ rfe_features
 
 ## Multiple Variables
 
+## Methods for evaluating models
+According to the multiple usage, we define a function so that we can do multiple performance calculations. This function includes several main methods. It will be used in the following sections and increase the efficiency of the code.
+
+```{r All performance_measures function}
+# Define functions
+#AUC - convert the target variable to numeric
+# predict <- as.numeric(predict(model, newdata = data, type = "class"))
+# print(calcAUC(predict, train_data[, target]))
+
+# ROC curve
+plot_roc <- function(predcol,outcol,colour_id = 2,overlaid = F) {
+  #Calculate the performance metrics of an ROC: TPR, FPR
+  ROCit_obj <- rocit(score = predcol, class = outcol == pos.label)
+  par(new = overlaid)
+  plot(
+    ROCit_obj,
+    col = c(colour_id, 1),
+    legend = FALSE,
+    YIndex = FALSE,
+    values = FALSE
+  )
+}
+
+# plot_roc(test_data$pred_expected_goal_involvements_per_90,
+#          test_data[, target])
+# plot_roc(
+#   test_data$pred_direct_freekicks_order,
+#   test_data[, target],
+#   colour_id = 4,
+#   overlaid = T
+# )
+
+#Confusion matrix - single
+cm_value <- function(pred, truth, name = "model") {
+   ctable <- table(truth = truth, pred = (pred < 2))
+   accuracy <- sum(diag(ctable)) / sum(ctable)
+   precision <- ctable[2, 2] / sum(ctable[, 2])
+   Recall <- ctable[2, 2] / sum(ctable[2, ])
+   F1 <- 2 * precision * Recall / (precision + Recall)
+   data.frame(Model = name, Precision = precision,
+              Recall = Recall,
+              F1 = F1, Accuracy = accuracy)}
+   
+#Confusion matrix - combined for training data and test data
+CM_metrics <- function(pred1, pred2,truth1,truth2, name="model", name1="model1"){
+  pred1_performance <- cm_value(pred1, truth1, name1)
+  pred2_performance <- cm_value(pred2, truth2, name)
+  result <- rbind(pred1_performance, pred2_performance)
+  print(result)
+}
+
+
+```
+
+```{r All performance_measures function }
+#Define a performance measure function including AUC, AOC, Likelihood Ratio, Confusion Matrix
+main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=pos.label, name="model") {
+  auc_train <- calcAUC(pred_train, truth_train)
+  auc_test <- calcAUC(pred_test, truth_test)
+  cat("AUC for training data is", auc_train, "\n","AUC for test data is", auc_test, "\n")
+  auc_plot_train <- plotAUC(pred_train,truth_train)
+  auc_plot_test <- plotAUC(pred_test,truth_test)
+  auc_plot_train
+  auc_plot_test
+  # roc_plot <- plot_roc(pred_train, truth_train)
+  # print(roc_plot)
+  # likelihood_ratio <- logLikelihood(pred_train, truth_train)
+  # print(likelihood_ratio)
+  # confusionMatrix <- CM_metrics(pred, truth)
+  # print(confusionMatrix)
+
+}
+
+```
 ### Decision Tree
 - Build decision tree for all variables
 ```{r decision_tree}
@@ -648,66 +696,51 @@ tree_test_data <- test_data %>%
 
 tmodel <- rpart(player_type ~., data=tree_train_data, method = 'class')
 
-predict <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
 
-print(calcAUC(predict, train_data[, target]))
-
-predict <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
-
-
-pp <- prediction(predict, tree_test_data[, target])
-
-
-print(calcAUC(predict, tree_test_data[, target]))
-
-tmodel <- rpart(fV, data=train_data,method = "class")
 rpart.plot(tmodel)
+```
+- Performance Measures
+```{r}
+#Special data processing for decision tree before calculating the performance measures
+predict_train <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
+predict_test <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
+truth_train <- ifelse(tree_train_data$player_type == "Offensive", 1, 2)
+truth_test <- ifelse(tree_test_data$player_type == "Offensive", 1, 2)
+
+tmodel_performance <- main_performance(predict_train,predict_test,tree_train_data$player_type,tree_test_data$player_type, name="tmodel")
+
 ```
 
 
-- Performance Measures
-```{r AUC}
-#AUC score
-fV <- paste(target,'>0 ~',paste(c(catVars, numericVars), collapse=' + '),sep='')
-tmodel <- rpart(fV, data=train_data)
 
-print(calcAUC(predict(tmodel, newdata=train_data), train_data[, target]))
+```{r confusion_matrix - metrics}
+#convert the target value to match the prediction value
+truth_train <- ifelse(tree_train_data$player_type == "Offensive", 1, 2)
+truth_test <- ifelse(tree_test_data$player_type == "Offensive", 1, 2)
+
+#print out the confusion matrix result for decision tree
+tcm <- CM_metrics(predict_train, predict_test,truth_train, truth_test, "tmodel-Train", "tmodel-Test")
+tcm
+```
+
+
+
+```{r AUC}
+#AUC score for the training data and test data
+predict_train <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
+print(calcAUC(predict_train, train_data[, target]))
+
+predict_test <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
+print(calcAUC(predict_test, test_data[, target]))
+
 ```
 
 ```{r confusion_matrix}
-#Create a Confusion Matrix function
-performanceMeasures <- function(pred, truth, name = "model") {
-   ctable <- table(truth = truth, pred = (pred > 0.5))
-   accuracy <- sum(diag(ctable)) / sum(ctable)
-   precision <- ctable[2, 2] / sum(ctable[, 2])
-   recall <- ctable[2, 2] / sum(ctable[2, ])
-   f1 <- 2 * precision * recall / (precision + recall)
-   data.frame(model = name, precision = precision,
-              recall = recall,
-              f1 = f1, accuracy = accuracy)
-}
-
-pretty_perf_table <- function(model,train_data,test_data) {
-  # setting up Pander Options
-  panderOptions("plain.ascii", TRUE)
-  panderOptions("keep.trailing.zeros", TRUE)
-  panderOptions("table.style", "simple")
-  perf_justify <- "lrrrr"
-  # comparing performance on training vs. test
-  pred_train <- predict(model, newdata=train_data)
-  truth_train <- train_data[, target]
-  pred_test <- predict(model, newdata=test_data)
-  truth_test <- test_data[, target]
-  trainperf_tree <- performanceMeasures(
-      pred_train, truth_train, "tmodel, training")
-  testperf_tree <- performanceMeasures(
-      pred_test, truth_test, "tmodel, test")
-  perftable <- rbind(trainperf_tree, testperf_tree)
-  pandoc.table(perftable, justify = perf_justify)
-}
-
-pretty_perf_table(tmodel, train_data, test_data)
+table_train <- table(train_data[, target], predict_train)
+table_train
 ```
+
+
 
 
 - Build decision tree for selected variables
@@ -754,18 +787,6 @@ model <- fit_iris_example(input, train_data$player_type)
 ## Models Evaluation
 
 ### Confusion Matrix
-```{r}
-# 设置新的阈值
-threshold.value = 0.7  # 例如，将阈值设为0.7
-
-# 根据阈值将预测的类别重新分配
-predicted_classes <- ifelse(train_data$pred_expected_goal_involvements_per_90 >= threshold.value, 1, 0)
-
-# 计算混淆矩阵
-confusion_matrix <- confusionMatrix(predicted_classes, train_data$expected_goal_involvements_per_90)
-
-# 输出混淆矩阵
-print(confusion_matrix)
 
 
 ```
