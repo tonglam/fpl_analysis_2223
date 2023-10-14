@@ -158,11 +158,7 @@ model_data <- model_data %>%
       "own_goals",
       "yellow_cards"
     )
-  ) %>%
-  # drop columns highly correlated with the some other columns
-  select(-c("penalties_missed",
-            "penalties_saved",
-            "ict_index"))
+  )
 
 # str(model_data)
 # summary(model_data)
@@ -180,6 +176,7 @@ which(missing_values > 0)
 # if the expected 90 values are NaN, it means that the player did not play a single minute
 model_data <- model_data %>%
   mutate(
+    minutes_per_90 = ifelse(is.na(minutes_per_90), 0, minutes_per_90),
     assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
     goals_per_90 = ifelse(is.na(goals_per_90), 0, goals_per_90),
     goals_conceded_per_90 = ifelse(is.na(goals_conceded_per_90), 0, goals_conceded_per_90),
@@ -208,9 +205,11 @@ model_data <- model_data %>%
                            position == 'DEF', "Defensive", "Offensive"),
     .before = position
   ) %>%
+  mutate(player_type_value = ifelse(player_type == "Defensive", 2, 1),
+         .after = player_type) %>%
   select(-position)
 
-knitr::kable(model_data[1:5,], caption =  "First 5 rows and first 5 conlumns of data")
+knitr::kable(model_data[1:5, ], caption =  "First 5 rows and first 5 conlumns of data")
 ```
 
 ### plot target value
@@ -281,7 +280,7 @@ target <- 'player_type'
 pos.label <- 'Offensive'
 
 # divide data into numerical and categorical
-vars <- setdiff(outCol, c('player_type'))
+vars <- setdiff(outCol, c('player_type', "player_type_value"))
 catVars <-
   vars[sapply(train_data[, vars], class) %in% c('factor', 'character')]
 numericVars <-
@@ -444,7 +443,7 @@ for (v in numericVars) {
 
 # sort by train AUC desc, then test AUC desc
 numResult <- arrange(numResult, desc(trainAUC), desc(testAUC))
-numResult
+numResult['pred']
 ```
 
 - further explore the AUC values of the above numerical columns
@@ -471,9 +470,6 @@ for (col in Ncol[1:6]) {
 
 grid.arrange(grobs = Nplotlist, ncol = 2)
 ```
-
-
-
 
 ### likelihood ratio test
 
@@ -513,7 +509,7 @@ observeVars <- c(expectedVars, actualVars)
 sel_num_result <- tribble( ~ feature, ~ pred, ~ deviance)
 observe_selNumResult <- tribble( ~ feature, ~ pred, ~ deviance)
 
-minDrop <- 10  # may need to adjust this number
+minDrop <- 3  # may need to adjust this number
 for (v in numericVars) {
   v
   pi <- paste('pred_', v, sep = '')
@@ -541,14 +537,13 @@ for (v in numericVars) {
 
 # sort by deviance desc
 sel_num_result <- arrange(sel_num_result, desc(deviance))
-sel_num_result$pred
 observe_selNumResult <-
   arrange(observe_selNumResult, desc(deviance))
-observe_selNumResult$pred
 
 # drop actual variable
 sel_num_result <-
   sel_num_result %>% filter(!feature %in% actualVars)
+sel_num_result$pred
 numericVars <- numericVars[!numericVars %in% actualVars]
 ```
 
@@ -606,7 +601,7 @@ result <- rfe(rfe_train_data[, -which(names(rfe_train_data) == target)],
               rfeControl = rfeControl(functions = rfFuncs),
               method = "repeatedcv",
               verbose = FALSE)
-rfe_features <- result$optVariables[1:6]
+rfe_features <- result$optVariables[1:12]
 rfe_features
 ```
 
@@ -797,7 +792,7 @@ input <- as.matrix(xgb_train_data_1[-c(1, 2)])
 cv <- xgb.cv(
   data = input,
   label = xgb_train_data_1$type,
-  nrounds = 10,
+  nrounds = 50,
   nfold = 5,
   print_every_n = 10,
   metrics = "logloss"
@@ -853,7 +848,7 @@ input <- as.matrix(xgb_train_data_2[-c(1, 2)])
 cv <- xgb.cv(
   data = input,
   label = xgb_train_data_2$type,
-  nrounds = 100,
+  nrounds = 50,
   nfold = 5,
   print_every_n = 10,
   metrics = "logloss"
@@ -887,11 +882,6 @@ pred <- predict(model, test_input)
 print(calcAUC(pred, xgb_test_data_2[, target]))
 
 
-
-```
-
-
-```{r xgboost_combine_2}
 
 ```
 
