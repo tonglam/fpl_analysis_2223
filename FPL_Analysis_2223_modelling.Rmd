@@ -31,235 +31,265 @@ library(ROCR)
 library(ROCit)
 library(pander)
 library(xgboost)
+library(lime)
 ```
-
-## Read Data
-
-```{r read_data, message=FALSE}
-fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
-```
-
 # Data Preprocessing
 
 ## Initial Transform
 
-```{r transform, results='hide'}
-model_data <- fpl_raw_data %>%
-  # discard some columns, which are not useful for our analysis
-  # for example, names, teams, points, news and variable related to cost
-  select(
-    -c(
-      "id",
-      "team",
-      "name",
-      "now_cost",
-      "transfers_out",
-      "value_form",
-      "value_season",
-      "cost_change_start",
-      "news_added",
-      "cost_change_start_fall",
-      "ep_next",
-      "event_points",
-      "web_name",
-      "status",
-      "news",
-      "chance_of_playing_next_round",
-      "dreamteam_count",
-      "chance_of_playing_this_round",
-      "points_per_game",
-      "total_points",
-      "in_dreamteam",
-      "form",
-      "ep_this",
-      "transfers_in",
-      "selected_by_percent",
-      "bps",
-      "bonus"
-    )
-  ) %>%
-  select(-ends_with("rank")) %>%
-  select(-ends_with("rank_type"))
-
-# str(model_data)
-# summary(model_data)
-
-# remove raw data
-rm(fpl_raw_data)
+```{r preprocess_init_transform}
+preprocess_init_transform <- function(data) {
+  data %>%
+    # drop some columns, which are not useful for our analysis
+    # for example, names, teams, points, news and variable related to cost
+    select(
+      -c(
+        "id",
+        "team",
+        "name",
+        "now_cost",
+        "transfers_out",
+        "value_form",
+        "value_season",
+        "cost_change_start",
+        "news_added",
+        "cost_change_start_fall",
+        "ep_next",
+        "event_points",
+        "web_name",
+        "status",
+        "news",
+        "chance_of_playing_next_round",
+        "dreamteam_count",
+        "chance_of_playing_this_round",
+        "points_per_game",
+        "total_points",
+        "in_dreamteam",
+        "form",
+        "ep_this",
+        "transfers_in",
+        "selected_by_percent",
+        "bps",
+        "bonus"
+      )
+    ) %>%
+    select(-ends_with("rank")) %>%
+    select(-ends_with("rank_type"))
+}
 ```
 
 ## Handle Missing Values
 
-```{r missing_values}
-# check missing values
-sum(is.na(model_data))
-# check which columns have missing values
-missing_values_sum <- colSums(is.na(model_data) > 0)
-missing_values_sum[missing_values_sum > 0]
-# convert missing values columns to categorical variables, True represent not missing and False represent missing
-model_data <- model_data %>%
-  mutate(
-    corners_and_indirect_freekicks_order = ifelse(
-      is.na(corners_and_indirect_freekicks_order),
-      "Non-Taker",
-      "Taker"
-    ),
-    penalties_order = ifelse(is.na(penalties_order), "Non-Taker", "Taker"),
-    direct_freekicks_order = ifelse(is.na(direct_freekicks_order), "Non-Taker", "Taker")
-  )
-# check missing values again
-sum(is.na(model_data))
+```{r preprocess_init_handle_NAs}
+preprocess_init_handle_NAs <- function(data) {
+  # check missing values
+  sum(is.na(data))
+  # check which columns have missing values
+  missing_values_sum <- colSums(is.na(data) > 0)
+  missing_values_sum[missing_values_sum > 0]
+  # convert missing values columns to categorical variables, True represent not missing and False represent missing
+  data <- data %>%
+    mutate(
+      corners_and_indirect_freekicks_order = ifelse(
+        is.na(corners_and_indirect_freekicks_order),
+        "Non-Taker",
+        "Taker"
+      ),
+      penalties_order = ifelse(is.na(penalties_order), "Non-Taker", "Taker"),
+      direct_freekicks_order = ifelse(is.na(direct_freekicks_order), "Non-Taker", "Taker")
+    )
+  # check missing values again
+  sum(is.na(data))
+  
+  return(data)
+}
 ```
-## Future Engineering
+
+## Further Transform
 
 drop Position Column because it is highly correlated with the label column, like we just used it to create the label column.
 
 Then, we should covert the label column to numerical values, 1 present offensive, 0 present defensive.
 
-```{r transform_2, results='hide'}
-model_data <- model_data %>%
-  # drop highly correlated columns, if a variable has per 90 values, remain per 90 values instead of the origin ones because they are more useful for further analysis
-  select(
-    -c(
-      "clean_sheets",
-      "expected_assists",
-      "starts",
-      "expected_goals_conceded",
-      "saves",
-      "expected_goal_involvements",
-      "expected_goals"
+```{r preprocess_further_transform, results='hide'}
+preprocess_further_transform <- function(data) {
+  data %>%
+    # drop highly correlated columns, if a variable has per 90 values, remain per 90 values instead of the origin ones because they are more useful for further analysis
+    select(
+      -c(
+        "clean_sheets",
+        "expected_assists",
+        "starts",
+        "expected_goals_conceded",
+        "saves",
+        "expected_goal_involvements",
+        "expected_goals"
+      )
+    ) %>%
+    # transform other performance variable to per 90 values
+    mutate(minutes_per_90 = minutes / 90, .after = minutes) %>%
+    mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>%
+    mutate(goals_per_90 = goals_scored / minutes * 90,
+           .after = goals_scored) %>%
+    mutate(goals_conceded_per_90 = goals_conceded / minutes * 90,
+           .after = goals_conceded) %>%
+    mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
+    mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
+    mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
+    mutate(creativity_per_90 = creativity / minutes * 90,
+           .after = creativity) %>%
+    mutate(own_goals_per_90 = own_goals / minutes * 90, .after = own_goals) %>%
+    mutate(yellow_cards_per_90 = yellow_cards / minutes * 90,
+           .after = yellow_cards) %>%
+    # drop the origin columns
+    select(
+      -c(
+        "minutes",
+        "assists",
+        "goals_scored",
+        "goals_conceded",
+        "red_cards",
+        "threat",
+        "influence",
+        "creativity",
+        "own_goals",
+        "yellow_cards"
+      )
     )
-  ) %>%
-  # transform other performance variable to per 90 values
-  mutate(minutes_per_90 = minutes / 90, .after = minutes) %>%
-  mutate(assists_per_90 = assists / minutes * 90, .after = assists) %>%
-  mutate(goals_per_90 = goals_scored / minutes * 90,
-         .after = goals_scored) %>%
-  mutate(goals_conceded_per_90 = goals_conceded / minutes * 90,
-         .after = goals_conceded) %>% 
-  mutate(red_cards_per_90 = red_cards / minutes * 90, .after = red_cards) %>%
-  mutate(threat_per_90 = threat / minutes * 90, .after = threat) %>%
-  mutate(influence_per_90 = influence / minutes * 90, .after = influence) %>%
-  mutate(creativity_per_90 = creativity / minutes * 90, .after = creativity) %>%
-  mutate(own_goals_per_90 = own_goals / minutes * 90, .after = own_goals) %>%
-  mutate(yellow_cards_per_90 = yellow_cards / minutes * 90,
-         .after = yellow_cards) %>%
-  # drop the origin columns
-  select(
-    -c(
-      "minutes",
-      "assists",
-      "goals_scored",
-      "goals_conceded",
-      "red_cards",
-      "threat",
-      "influence",
-      "creativity",
-      "own_goals",
-      "yellow_cards"
-    )
-  )
-
-# str(model_data)
-# summary(model_data)
+}
 ```
 
 ### Features that were removed
 
 ### Features that were included
 
-```{r missing_values_2}
-# count missing values
-missing_values <- apply(is.na(model_data), 2, sum)
-which(missing_values > 0)
-# if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
-# if the expected 90 values are NaN, it means that the player did not play a single minute
-model_data <- model_data %>%
-  mutate(
-    minutes_per_90 = ifelse(is.na(minutes_per_90), 0, minutes_per_90),
-    assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
-    goals_per_90 = ifelse(is.na(goals_per_90), 0, goals_per_90),
-    goals_conceded_per_90 = ifelse(is.na(goals_conceded_per_90), 0, goals_conceded_per_90),
-    red_cards_per_90 = ifelse(is.na(red_cards_per_90), 0, red_cards_per_90),
-    threat_per_90 = ifelse(is.na(threat_per_90), 0, threat_per_90),
-    influence_per_90 = ifelse(is.na(influence_per_90), 0, influence_per_90),
-    creativity_per_90 = ifelse(is.na(creativity_per_90), 0, creativity_per_90),
-    own_goals_per_90 = ifelse(is.na(own_goals_per_90), 0, own_goals_per_90),
-    yellow_cards_per_90 = ifelse(is.na(yellow_cards_per_90), 0, yellow_cards_per_90)
-  )
-
-# look at the missing values again, they have been cleaned
-missing_values <- apply(is.na(model_data), 2, sum)
-missing_values
+```{r preprocess_further_handle_NAs}
+preprocess_further_handle_NAs <- function(data) {
+  # count missing values
+  missing_values <- apply(is.na(data), 2, sum)
+  which(missing_values > 0)
+  # if the actual value and expected value are both 0, then the actual value of 90 and expected value of 90 will result in NaN
+  # if the expected 90 values are NaN, it means that the player did not play a single minute
+  data <- data %>%
+    mutate(
+      minutes_per_90 = ifelse(is.na(minutes_per_90), 0, minutes_per_90),
+      assists_per_90 = ifelse(is.na(assists_per_90), 0, assists_per_90),
+      goals_per_90 = ifelse(is.na(goals_per_90), 0, goals_per_90),
+      goals_conceded_per_90 = ifelse(is.na(goals_conceded_per_90), 0, goals_conceded_per_90),
+      red_cards_per_90 = ifelse(is.na(red_cards_per_90), 0, red_cards_per_90),
+      threat_per_90 = ifelse(is.na(threat_per_90), 0, threat_per_90),
+      influence_per_90 = ifelse(is.na(influence_per_90), 0, influence_per_90),
+      creativity_per_90 = ifelse(is.na(creativity_per_90), 0, creativity_per_90),
+      own_goals_per_90 = ifelse(is.na(own_goals_per_90), 0, own_goals_per_90),
+      yellow_cards_per_90 = ifelse(is.na(yellow_cards_per_90), 0, yellow_cards_per_90)
+    )
+  
+  # look at the missing values again, they have been cleaned
+  missing_values <- apply(is.na(data), 2, sum)
+  missing_values
+  
+  return(data)
+}
 ```
 
-## Target Value
+## Add Target Value
 
 add a target column
 
-```{r target}
-model_data <- model_data %>%
-  # create target column, 1 represents offensive player, 0 represents defensive player
-  mutate(
-    player_type = ifelse(position == 'GKP' |
-                           position == 'DEF', "Defensive", "Offensive"),
-    .before = position
-  ) %>%
-  mutate(player_type_value = ifelse(player_type == "Defensive", 2, 1),
-         .after = player_type) %>%
-  select(-position)
-
-knitr::kable(model_data[1:5, ], caption =  "First 5 rows and first 5 conlumns of data")
+```{r preprocess_target_value}
+preprocess_target_value <- function(data) {
+  data %>%
+    # create target column, 1 represents offensive player, 0 represents defensive player
+    mutate(
+      player_type = ifelse(position == 'GKP' |
+                             position == 'DEF', "Defensive", "Offensive"),
+      .before = position
+    ) %>%
+    mutate(player_type_value = ifelse(player_type == "Defensive", 2, 1),
+           .after = player_type) %>%
+    select(-position)
+}
 ```
 
 ### plot target value
-```{r target_value_barplot}
-model_data %>%
-  ggplot(aes(x = player_type, fill = player_type)) +
-  geom_bar(alpha = 0.8, width = 0.8) +
-  geom_label(stat = "count",
-             aes(label = ..count..),
-             show.legend = F) +
-  theme_ipsum() +
-  scale_fill_brewer(palette = "Set1")
+
+```{r preprocess_target_barplot}
+preprocess_target_barplot <- function(data, target) {
+  data %>%
+    ggplot(aes(x = target, fill = target)) +
+    geom_bar(alpha = 0.8, width = 0.8) +
+    geom_label(stat = "count",
+               aes(label = ..count..),
+               show.legend = F) +
+    theme_ipsum() +
+    scale_fill_brewer(palette = "Set1")
+}
 ```
 
-```{r target_value_donut}
-model_data %>%
-  mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>%
-  group_by(player_type) %>%
-  summarise(count = n()) %>%
-  mutate(
-    percentage = count / sum(count),
-    ymax = cumsum(percentage),
-    ymin = c(0, head(ymax, n = -1)),
-    labelPosition = (ymax + ymin) / 2,
-    label = paste(
-      ifelse(player_type == 0, 'Defensive' , 'Offensive'),
-      "\n",
-      round(percentage * 100, 2),
-      "%",
-      sep = ""
-    )
-  ) %>%
-  ggplot(aes(
-    ymax = ymax,
-    ymin = ymin,
-    xmax = 4,
-    xmin = 3,
-    fill = as.factor(player_type)
-  )) +
-  geom_rect() +
-  coord_polar(theta = "y") +
-  geom_label(x = 3.5,
-             aes(y = labelPosition, label = label),
-             size = 4) +
-  scale_fill_brewer(palette = 4) +
-  scale_color_brewer(palette = 3) +
-  xlim(c(2, 4)) +
-  theme_void() +
-  theme(legend.position = "none")
+```{r preprocess_target_donut}
+preprocess_target_donut <- function(data) {
+  data %>%
+    mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>%
+    group_by(player_type) %>%
+    summarise(count = n()) %>%
+    mutate(
+      percentage = count / sum(count),
+      ymax = cumsum(percentage),
+      ymin = c(0, head(ymax, n = -1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste(ifelse(player_type == 0, 'Defensive' , 'Offensive'),
+                    "\n",
+                    round(percentage * 100, 2),
+                    "%",
+                    sep = "")
+    ) %>%
+    ggplot(aes(
+      ymax = ymax,
+      ymin = ymin,
+      xmax = 4,
+      xmin = 3,
+      fill = as.factor(player_type)
+    )) +
+    geom_rect() +
+    coord_polar(theta = "y") +
+    geom_label(x = 3.5,
+               aes(y = labelPosition, label = label),
+               size = 4) +
+    scale_fill_brewer(palette = 4) +
+    scale_color_brewer(palette = 3) +
+    xlim(c(2, 4)) +
+    theme_void() +
+    theme(legend.position = "none")
+}
 ```
+
+
+## Read Data
+
+```{r read_data, message=FALSE}
+fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
+
+model_data <- fpl_raw_data %>% 
+  preprocess_init_transform() %>% 
+  preprocess_init_handle_NAs() %>%
+  preprocess_further_transform() %>%
+  preprocess_further_handle_NAs() %>%
+  preprocess_target_value()
+
+# target value plot
+model_data %>% preprocess_target_barplot(model_data$player_type)
+model_data %>% preprocess_target_donut()
+
+
+# remove raw data
+rm(fpl_raw_data)
+
+# str(model_data)
+# summary(model_data)
+
+# knitr::kable()
+```
+
 
 ## Split data into 2 sets
 
@@ -271,11 +301,11 @@ model_data %>%
 # do a 90/10 split to form the training and test sets.
 set.seed(500)
 fortrain <- runif(nrow(model_data)) < 0.9
-train_data <- model_data[fortrain,]
-test_data <- model_data[!fortrain,]
+train_data <- model_data[fortrain, ]
+test_data <- model_data[!fortrain, ]
 
 # prepare the data for modelling
-outCol <- names(train_data)[-1]
+outCol <- names(train_data)[-c(1, 2)]
 target <- 'player_type'
 pos.label <- 'Offensive'
 
@@ -670,9 +700,15 @@ main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=po
 
 ```
 ### Decision Tree
+<<<<<<< HEAD
+- Build decision tree for all variables
+
+the performance on the test set is slightly better than on the training set,
+=======
 
 ###For the combined variables - 1 
 - Build the model
+>>>>>>> c13cdf52f5c52e2d5500c195e6dd32771c5df6d2
 ```{r decision_tree_combined_1}
 tree_train_data_1 <-  train_data %>%
   select(all_of(c(target, combined_features)))
@@ -680,11 +716,26 @@ tree_train_data_1 <-  train_data %>%
 tree_test_data_1 <- test_data %>%
   select(all_of(c(target, combined_features)))
 
+<<<<<<< HEAD
+tmodel <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
+
+trainPredictions <- predict(tmodel, newdata=tree_train_data_1, type = "class")
+print(calcAUC(as.numeric(trainPredictions), tree_train_data_1[, target]))
+plotAUC(as.numeric(trainPredictions), tree_train_data_1[, target])
+trainAccuracy <- mean(trainPredictions == tree_train_data_1$player_type)
+print(paste("Training Accuracy:", trainAccuracy))
+
+testPredictions <- predict(tmodel, newdata=tree_test_data_1, type = "class")
+print(calcAUC(as.numeric(testPredictions), tree_test_data_1[, target]))
+testAccuracy <- mean(testPredictions == tree_test_data_1$player_type)
+print(paste("Test Accuracy:", testAccuracy))
+=======
 fV <- paste(target,'> 0 ~ ',
 paste(c(catVars, numericVars), collapse=' + '),
 sep='')
 tmodel1 <- rpart(player_type ~., tree_train_data_1,method = 'class')
 rpart.plot(tmodel1)
+>>>>>>> c13cdf52f5c52e2d5500c195e6dd32771c5df6d2
 
 ```
 - Performance Measures
@@ -793,49 +844,68 @@ xgb_test_data_1 <- test_data %>%
     penalties_order = ifelse(penalties_order == 'Taker', 1, 0)
   )
 
-input <- as.matrix(xgb_train_data_1[-c(1, 2)])
+input_1 <- as.matrix(xgb_train_data_1[-c(1, 2)])
 
-cv <- xgb.cv(
-  data = input,
-  label = xgb_train_data_1$type,
-  nrounds = 50,
-  nfold = 5,
-  print_every_n = 10,
-  metrics = "logloss"
-)
+# 
+# (NROUNDS <- which.min(evalframe$test_logloss_mean))
+# 
+# ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
+#   geom_line() +
+#   geom_vline(xintercept = NROUNDS,
+#              color = "darkred",
+#              linetype = 2) +
+#   ggtitle("Cross-validated log loss as a function of ensemble size")
 
-evalframe <- as.data.frame(cv$evaluation_log)
-
-head(evalframe)
-
-(NROUNDS <- which.min(evalframe$test_logloss_mean))
-
-ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
-  geom_line() +
-  geom_vline(xintercept = NROUNDS,
-             color = "darkred",
-             linetype = 2) +
-  ggtitle("Cross-validated log loss as a function of ensemble size")
-
-model <- xgboost(
-  data = input,
-  label = xgb_train_data_1$type,
-  params = list(
+xgb_params <- list(
     objective = "binary:logistic",
+    eval_metric = "auc",
     lambda = 1,
-    alpha = 1,
+    alpha = 0.1,
     max_depth = 3,
-    eta = 0.01
-    ),
-  nrounds = NROUNDS,
-  verbose = FALSE
+    min_child_weight = 5,
+    eta = 0.1
+    )
+
+xgbmodel_1 <- xgboost(
+  data = input_1,
+  label = xgb_train_data_1$type,
+  params = xgb_params,
+  nrounds = 100,
+  early_stopping_rounds = 10,
+  verbose = 0
 )
 
-test_input <- as.matrix(xgb_test_data_1[-c(1, 2)])
+cv_1 <- xgb.cv(
+  data = input_1,
+  label = xgb_train_data_1$type,
+  params = xgb_params,
+  nrounds = 100,
+  nfold = 5,
+  stratified = TRUE
+)
 
-pred <- predict(model, test_input)
+evalframe_1 <- as.data.frame(cv_1$evaluation_log)
 
-print(calcAUC(pred, xgb_test_data_1[, target]))
+head(evalframe_1)
+
+test_input_1 <- as.matrix(xgb_test_data_1[-c(1, 2)])
+
+
+train_pred_1 <- predict(xgbmodel_1, input_1)
+test_pred_1 <- predict(xgbmodel_1, test_input_1)
+
+print(calcAUC(train_pred_1, xgb_train_data_1[, target]))
+print(calcAUC(test_pred_1, xgb_test_data_1[, target]))
+# 
+# cv_results <- xgb.cv(
+#   data = as.matrix(train_data[, predictors]),
+#   label = train_data$target_variable,
+#   params = xgb_params,
+#   nrounds = 100,
+#   nfold = 5,
+#   stratified = TRUE,
+#   verbose = 0
+# )
 
 
 
@@ -855,77 +925,122 @@ xgb_test_data_2 <- test_data %>%
     type = as.numeric(player_type == 'Offensive'),
     .after = player_type)
 
-input <- as.matrix(xgb_train_data_2[-c(1, 2)])
+input_2 <- as.matrix(xgb_train_data_2[-c(1, 2)])
 
-cv <- xgb.cv(
-  data = input,
-  label = xgb_train_data_2$type,
-  nrounds = 50,
-  nfold = 5,
-  print_every_n = 10,
-  metrics = "logloss"
-)
-
-evalframe <- as.data.frame(cv$evaluation_log)
-
-head(evalframe)
-
-(NROUNDS <- which.min(evalframe$test_logloss_mean))
-
-ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
-  geom_line() +
-  geom_vline(xintercept = NROUNDS,
-             color = "darkred",
-             linetype = 2) +
-  ggtitle("Cross-validated log loss as a function of ensemble size")
-
-model <- xgboost(
-  data = input,
-  label = xgb_train_data_2$type,
-  params = list(
+xgb_params <- list(
     objective = "binary:logistic",
+    eval_metric = "auc",
     lambda = 1,
-    alpha = 1,
+    alpha = 0.1,
     max_depth = 3,
-    eta = 0.01
-    ),
-  nrounds = NROUNDS,
+    min_child_weight = 5,
+    eta = 0.1
+    )
+
+xgbmodel_2 <- xgboost(
+  data = input_2,
+  label = xgb_train_data_2$type,
+  params = xgb_params,
+  nrounds = 100,
   verbose = FALSE
 )
 
-test_input <- as.matrix(xgb_test_data_2[-c(1, 2)])
+cv_2 <- xgb.cv(
+  data = input_2,
+  label = xgb_train_data_1$type,
+  params = xgb_params,
+  nrounds = 100,
+  nfold = 5,
+  stratified = TRUE
+)
 
-pred <- predict(model, test_input)
+evalframe_2 <- as.data.frame(cv_2$evaluation_log)
 
-print(calcAUC(pred, xgb_test_data_2[, target]))
+head(evalframe_2)
+
+test_input_2 <- as.matrix(xgb_test_data_2[-c(1, 2)])
+
+train_pred_2 <- predict(xgbmodel_2, input_2)
+test_pred_2 <- predict(xgbmodel_2, test_input_2)
+
+print(calcAUC(train_pred_2, xgb_train_data_2[, target]))
+print(calcAUC(test_pred_2, xgb_test_data_2[, target]))
 
 
 
-```
-
-```{r}
-#Build a xgboost model
-train_ <- as.matrix(numericVars)
-model <- fit_iris_example(input, train_data$player_type)
 ```
 
 
 ## Models Evaluation
 
-### Confusion Matrix
-
-
-```
 
 
 ## Explaining Models using LIME
 
 ```{r LIME}
+cases <- c(3,11,21,30)
 
+# combined_1
+sample_1 <- as.data.frame(xgb_test_data_1[cases, combined_features])
+explainer_1 <- lime(xgb_train_data_1[, combined_features], model = xgbmodel_1, bin_continuous = FALSE)
+true_label_1 <- xgb_test_data_1[cases, 2]
+explanation_1 <- explain(sample_1, explainer_1, n_labels = 1, n_features = 6)
+print(explanation_1)
+
+plot_features(explanation_1)
+plot_explanations(explanation_1)
+
+# combined_2
+sample_2 <- as.data.frame(xgb_test_data_2[cases, rfe_features])
+explainer_2 <- lime(xgb_train_data_2[, rfe_features], model = xgbmodel_2, bin_continuous = FALSE)
+true_label_2 <- xgb_test_data_2[cases, 2]
+explanation_2 <- explain(sample_2, explainer_2, n_labels = 1, n_features = 6)
+print(explanation_2)
+
+plot_features(explanation_2)
+plot_explanations(explanation_2)
+```
+## Performance Improve
+improve the models performances by implementing such measures:
+- increase the training data size
+- cross validation
+
+```{r merge_data}
+# read new data
+fpl_raw_data_1 <- read.csv("./FPL_Dataset_2022-2023.csv")
+fpl_raw_data_2 <- read.csv("./FPL_Dataset_2023-2024.csv")
+# merge
+common_columns <- intersect(names(fpl_raw_data_1), names(fpl_raw_data_2))
+fpl_raw_data <- merge(fpl_raw_data_1, fpl_raw_data_2, by = intersect(names(fpl_raw_data_1)), names(fpl_raw_data_2))
+
+head(fpl_raw_data)
+```
+
+```{r preprocess_data}
+
+# model_data <- fpl_raw_data %>% 
+#   preprocess_init_transform() %>% 
+#   preprocess_init_handle_NAs() %>%
+#   preprocess_further_transform() %>%
+#   preprocess_further_handle_NAs() %>%
+#   preprocess_target_value()
+# 
+# # target value plot
+# model_data %>% preprocess_target_barplot(model_data$player_type)
+# model_data %>% preprocess_target_donut()
+# 
+# 
+# # remove raw data
+# rm(fpl_raw_data)
+# 
+# # str(model_data)
+# # summary(model_data)
+# 
+# # knitr::kable()
 ```
 
 
-### Decision Tree Model
+## Decision Tree Model
 
 ## XGBoost Model
 
