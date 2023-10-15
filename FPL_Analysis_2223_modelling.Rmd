@@ -477,7 +477,7 @@ grid.arrange(grobs = Nplotlist, ncol = 2)
 # store the top performing categorical variables.
 select_cat_result <- tribble(~ feature,  ~ pred, ~ deviance)
 
-minDrop <- 10  # may need to adjust this number
+minDrop <- 10 
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   devDrop <-
@@ -509,7 +509,7 @@ observeVars <- c(expectedVars, actualVars)
 sel_num_result <- tribble( ~ feature, ~ pred, ~ deviance)
 observe_selNumResult <- tribble( ~ feature, ~ pred, ~ deviance)
 
-minDrop <- 3  # may need to adjust this number
+minDrop <- 3  
 for (v in numericVars) {
   v
   pi <- paste('pred_', v, sep = '')
@@ -613,32 +613,22 @@ According to the multiple usage, we define a function so that we can do multiple
 
 ```{r All performance_measures function}
 # Define functions
-#AUC - convert the target variable to numeric
-# predict <- as.numeric(predict(model, newdata = data, type = "class"))
-# print(calcAUC(predict, train_data[, target]))
+#convert the target variable to numeric
 
 # ROC curve
-plot_roc <- function(predcol,outcol,colour_id = 2,overlaid = F) {
-  #Calculate the performance metrics of an ROC: TPR, FPR
-  ROCit_obj <- rocit(score = predcol, class = outcol == pos.label)
-  par(new = overlaid)
-  plot(
-    ROCit_obj,
-    col = c(colour_id, 1),
-    legend = FALSE,
-    YIndex = FALSE,
-    values = FALSE
-  )
+plot_roc <- function(predcol1, outcol1, predcol2, outcol2){
+roc_1 <- rocit(score=predcol1, class=outcol1==pos.label)
+roc_2 <- rocit(score=predcol2, class=outcol2==pos.label)
+plot(roc_1, col = c("lightblue","forestgreen"), lwd = 3,
+legend = FALSE,YIndex = FALSE, values = TRUE, asp=1)
+lines(roc_2$TPR ~ roc_2$FPR, lwd = 3,
+col = c("pink","forestgreen"), asp=1)
+legend("bottomright", col = c("lightblue","pink", "forestgreen"),
+c("Test Data", "Training Data", "Null Model"), lwd = 2)
 }
-
-# plot_roc(test_data$pred_expected_goal_involvements_per_90,
-#          test_data[, target])
-# plot_roc(
-#   test_data$pred_direct_freekicks_order,
-#   test_data[, target],
-#   colour_id = 4,
-#   overlaid = T
-# )
+# 
+# plot_roc(pred_test_roc, dTest[[target]],
+# pred_train_roc, dTrain[[target]])
 
 #Confusion matrix - single
 cm_value <- function(pred, truth, name = "model") {
@@ -664,15 +654,12 @@ CM_metrics <- function(pred1, pred2,truth1,truth2, name="model", name1="model1")
 
 ```{r All performance_measures function }
 #Define a performance measure function including AUC, AOC, Likelihood Ratio, Confusion Matrix
-main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=pos.label, name="model") {
+main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=pos.label, name="model") { #calculate the AUC
   auc_train <- calcAUC(pred_train, truth_train)
   auc_test <- calcAUC(pred_test, truth_test)
   cat("AUC for training data is", auc_train, "\n","AUC for test data is", auc_test, "\n")
-  auc_plot_train <- plotAUC(pred_train,truth_train)
-  auc_plot_test <- plotAUC(pred_test,truth_test)
-  auc_plot_train
-  auc_plot_test
-  # roc_plot <- plot_roc(pred_train, truth_train)
+  #calculate the ROC
+  roc_plot <- plot_roc(pred_train, truth_train)
   # print(roc_plot)
   # likelihood_ratio <- logLikelihood(pred_train, truth_train)
   # print(likelihood_ratio)
@@ -683,45 +670,49 @@ main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=po
 
 ```
 ### Decision Tree
-- Build decision tree for all variables
+
+###For the combined variables - 1 
+- Build the model
 ```{r decision_tree_combined_1}
-tree_train_data_1 <-  train_data %>% 
+tree_train_data_1 <-  train_data %>%
   select(all_of(c(target, combined_features)))
 
-tree_test_data_1 <- test_data %>% 
+tree_test_data_1 <- test_data %>%
   select(all_of(c(target, combined_features)))
 
-tmodel <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
-
-predict <- as.numeric(predict(tmodel, newdata=tree_train_data_1, type = "class"))
-
-print(calcAUC(predict, tree_train_data_1[, target]))
-
-predict <- as.numeric(predict(tmodel, newdata=tree_test_data_1, type = "class"))
+fV <- paste(target,'> 0 ~ ',
+paste(c(catVars, numericVars), collapse=' + '),
+sep='')
+tmodel1 <- rpart(player_type ~., tree_train_data_1,method = 'class')
+rpart.plot(tmodel1)
 
 ```
 - Performance Measures
 ```{r}
-#Special data processing for decision tree before calculating the performance measures
-predict_train <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
-predict_test <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
-truth_train <- ifelse(tree_train_data$player_type == "Offensive", 1, 2)
-truth_test <- ifelse(tree_test_data$player_type == "Offensive", 1, 2)
 
-tmodel_performance <- main_performance(predict_train,predict_test,tree_train_data$player_type,tree_test_data$player_type, name="tmodel")
+```
+
+```{r}
+#Special data processing for decision tree before calculating the performance measures
+predict_train <- as.numeric(predict(tmodel1, newdata=tree_train_data_1, type = "class"))
+predict_test <- as.numeric(predict(tmodel1, newdata=tree_test_data_1, type = "class"))
+truth_train <- ifelse(tree_train_data_1$player_type == "Offensive", 1, 2)
+truth_test <- ifelse(tree_test_data_1$player_type == "Offensive", 1, 2)
+
+tmodel_performance <- main_performance(predict_train,predict_test,tree_train_data_1$player_type,tree_test_data_1$player_type, name="tmodel")
 
 ```
 
 ```{r confusion_matrix - metrics}
 #convert the target value to match the prediction value
-truth_train <- ifelse(tree_train_data$player_type == "Offensive", 1, 2)
-truth_test <- ifelse(tree_test_data$player_type == "Offensive", 1, 2)
+truth_train <- ifelse(tree_train_data_1$player_type == "Offensive", 1, 2)
+truth_test <- ifelse(tree_test_data_1$player_type == "Offensive", 1, 2)
 
 #print out the confusion matrix result for decision tree
-tcm <- CM_metrics(predict_train, predict_test,truth_train, truth_test, "tmodel-Train", "tmodel-Test")
-tcm
+tcm1 <- CM_metrics(predict_train, predict_test,truth_train, truth_test, "tmodel-Train", "tmodel-Test")
 ```
-
+###For the combined variables - 2
+- Build the model
 ```{r decision_tree_combined_2}
 tree_train_data_2 <-  train_data %>% 
   select(all_of(c(target, rfe_features)))
@@ -729,13 +720,13 @@ tree_train_data_2 <-  train_data %>%
 tree_test_data_2 <- test_data %>% 
   select(all_of(c(target, rfe_features)))
 
-tmodel <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
+tmodel2 <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
 
-predict <- as.numeric(predict(tmodel, newdata=tree_train_data_2, type = "class"))
+predict <- as.numeric(predict(tmodel2, newdata=tree_train_data_2, type = "class"))
 
 print(calcAUC(predict, tree_train_data_2[, target]))
 
-predict <- as.numeric(predict(tmodel, newdata=tree_test_data_2, type = "class"))
+predict <- as.numeric(predict(tmodel2, newdata=tree_test_data_2, type = "class"))
 
 
 pp <- prediction(predict, tree_test_data_2[, target])
@@ -743,29 +734,44 @@ pp <- prediction(predict, tree_test_data_2[, target])
 
 print(calcAUC(predict, tree_test_data_2[, target]))
 
-rpart.plot(tmodel)
+rpart.plot(tmodel2)
 ```
-
+- Performance Measures
 
 ```{r AUC}
 #AUC score for the training data and test data
-predict_train <- as.numeric(predict(tmodel, newdata=tree_train_data, type = "class"))
+predict_train <- as.numeric(predict(tmodel2, newdata=tree_train_data_2, type = "class"))
 print(calcAUC(predict_train, train_data[, target]))
 
-predict_test <- as.numeric(predict(tmodel, newdata=tree_test_data, type = "class"))
+predict_test <- as.numeric(predict(tmodel2, newdata=tree_test_data_2, type = "class"))
 print(calcAUC(predict_test, test_data[, target]))
 
 ```
 
 ```{r confusion_matrix}
-table_train <- table(train_data[, target], predict_train)
-table_train
+# table_train <- table(train_data[, target], predict_train)
+# table_train
 ```
 
+```{r}
+# ROC curve
+plot_roc <- function(predcol1, outcol1, predcol2, outcol2){
+roc_1 <- rocit(score=predcol1, class=outcol1==pos.label)
+roc_2 <- rocit(score=predcol2, class=outcol2==pos.label)
+plot(roc_1, col = c("lightblue","forestgreen"), lwd = 3,
+legend = FALSE,YIndex = FALSE, values = TRUE, asp=1)
+lines(roc_2$TPR ~ roc_2$FPR, lwd = 3,
+col = c("pink","forestgreen"), asp=1)
+legend("bottomright", col = c("lightblue","pink", "forestgreen"),
+c("Test Data", "Training Data", "Null Model"), lwd = 2)
+}
+pred_train_roc <- predict(tmodel1, newdata=tree_train_data_1)
+pred_test_roc <- predict(tmodel1, newdata=tree_test_data_1)
 
+plot_roc(pred_test_roc, tree_test_data_1[[target]],
+pred_train_roc, tree_train_data_1[[target]])
+```
 
-
-- Build decision tree for selected variables
 
 ### XGBoost
 
