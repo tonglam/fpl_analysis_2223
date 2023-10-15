@@ -814,7 +814,13 @@ ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
 model <- xgboost(
   data = input,
   label = xgb_train_data_1$type,
-  params = list(objective = "binary:logistic"),
+  params = list(
+    objective = "binary:logistic",
+    lambda = 1,
+    alpha = 1,
+    max_depth = 3,
+    eta = 0.01
+    ),
   nrounds = NROUNDS,
   verbose = FALSE
 )
@@ -870,7 +876,13 @@ ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
 model <- xgboost(
   data = input,
   label = xgb_train_data_2$type,
-  params = list(objective = "binary:logistic"),
+  params = list(
+    objective = "binary:logistic",
+    lambda = 1,
+    alpha = 1,
+    max_depth = 3,
+    eta = 0.01
+    ),
   nrounds = NROUNDS,
   verbose = FALSE
 )
