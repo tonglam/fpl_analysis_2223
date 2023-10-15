@@ -307,6 +307,7 @@ test_data <- model_data[!fortrain, ]
 # prepare the data for modelling
 outCol <- names(train_data)[-c(1, 2)]
 target <- 'player_type'
+target_value <- 'player_type_value'
 pos.label <- 'Offensive'
 
 # divide data into numerical and categorical
@@ -712,15 +713,14 @@ tree_train_data_1 <-  train_data %>%
 tree_test_data_1 <- test_data %>%
   select(all_of(c(target, combined_features)))
 
-tmodel <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
+tmodel_1 <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
 
-trainPredictions <- predict(tmodel, newdata=tree_train_data_1, type = "class")
+trainPredictions <- predict(tmodel_1, newdata=tree_train_data_1, type = "class")
 print(calcAUC(as.numeric(trainPredictions), tree_train_data_1[, target]))
-plotAUC(as.numeric(trainPredictions), tree_train_data_1[, target])
 trainAccuracy <- mean(trainPredictions == tree_train_data_1$player_type)
 print(paste("Training Accuracy:", trainAccuracy))
 
-testPredictions <- predict(tmodel, newdata=tree_test_data_1, type = "class")
+testPredictions <- predict(tmodel_1, newdata=tree_test_data_1, type = "class")
 print(calcAUC(as.numeric(testPredictions), tree_test_data_1[, target]))
 testAccuracy <- mean(testPredictions == tree_test_data_1$player_type)
 print(paste("Test Accuracy:", testAccuracy))
@@ -733,8 +733,8 @@ print(paste("Test Accuracy:", testAccuracy))
 
 ```{r}
 #Special data processing for decision tree before calculating the performance measures
-predict_train <- as.numeric(predict(tmodel1, newdata=tree_train_data_1, type = "class"))
-predict_test <- as.numeric(predict(tmodel1, newdata=tree_test_data_1, type = "class"))
+predict_train <- as.numeric(predict(tmodel_1, newdata=tree_train_data_1, type = "class"))
+predict_test <- as.numeric(predict(tmodel_1, newdata=tree_test_data_1, type = "class"))
 truth_train <- ifelse(tree_train_data_1$player_type == "Offensive", 1, 2)
 truth_test <- ifelse(tree_test_data_1$player_type == "Offensive", 1, 2)
 
@@ -759,13 +759,13 @@ tree_train_data_2 <-  train_data %>%
 tree_test_data_2 <- test_data %>% 
   select(all_of(c(target, rfe_features)))
 
-tmodel2 <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
+tmodel_2 <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
 
-predict <- as.numeric(predict(tmodel2, newdata=tree_train_data_2, type = "class"))
+predict <- as.numeric(predict(tmodel_2, newdata=tree_train_data_2, type = "class"))
 
 print(calcAUC(predict, tree_train_data_2[, target]))
 
-predict <- as.numeric(predict(tmodel2, newdata=tree_test_data_2, type = "class"))
+predict <- as.numeric(predict(tmodel_2, newdata=tree_test_data_2, type = "class"))
 
 
 pp <- prediction(predict, tree_test_data_2[, target])
@@ -773,16 +773,16 @@ pp <- prediction(predict, tree_test_data_2[, target])
 
 print(calcAUC(predict, tree_test_data_2[, target]))
 
-rpart.plot(tmodel2)
+rpart.plot(tmodel_2)
 ```
 - Performance Measures
 
 ```{r AUC}
 #AUC score for the training data and test data
-predict_train <- as.numeric(predict(tmodel2, newdata=tree_train_data_2, type = "class"))
+predict_train <- as.numeric(predict(tmodel_2, newdata=tree_train_data_2, type = "class"))
 print(calcAUC(predict_train, train_data[, target]))
 
-predict_test <- as.numeric(predict(tmodel2, newdata=tree_test_data_2, type = "class"))
+predict_test <- as.numeric(predict(tmodel_2, newdata=tree_test_data_2, type = "class"))
 print(calcAUC(predict_test, test_data[, target]))
 
 ```
@@ -794,21 +794,38 @@ print(calcAUC(predict_test, test_data[, target]))
 
 ```{r}
 # ROC curve
-plot_roc <- function(predcol1, outcol1, predcol2, outcol2){
-roc_1 <- rocit(score=predcol1, class=outcol1==pos.label)
-roc_2 <- rocit(score=predcol2, class=outcol2==pos.label)
-plot(roc_1, col = c("lightblue","forestgreen"), lwd = 3,
-legend = FALSE,YIndex = FALSE, values = TRUE, asp=1)
-lines(roc_2$TPR ~ roc_2$FPR, lwd = 3,
-col = c("pink","forestgreen"), asp=1)
-legend("bottomright", col = c("lightblue","pink", "forestgreen"),
-c("Test Data", "Training Data", "Null Model"), lwd = 2)
+plot_roc <- function(predcol1, outcol1, predcol2, outcol2) {
+  roc_1 <- rocit(score = predcol1, class = outcol1 == pos.label)
+  roc_2 <- rocit(score = predcol2, class = outcol2 == pos.label)
+  plot(
+    roc_1,
+    col = c("lightblue", "forestgreen"),
+    lwd = 3,
+    legend = FALSE,
+    YIndex = FALSE,
+    values = TRUE,
+    asp = 1
+  )
+  lines(
+    roc_2$TPR ~ roc_2$FPR,
+    lwd = 3,
+    col = c("pink", "forestgreen"),
+    asp = 1
+  )
+  legend(
+    "bottomright",
+    col = c("lightblue", "pink", "forestgreen"),
+    c("Test Data", "Training Data", "Null Model"),
+    lwd = 2
+  )
 }
-pred_train_roc <- predict(tmodel1, newdata=tree_train_data_1)
-pred_test_roc <- predict(tmodel1, newdata=tree_test_data_1)
+pred_train_roc <- predict(tmodel_1, newdata = train_data)
+pred_test_roc <- predict(tmodel_1, newdata = test_data)
 
-plot_roc(pred_test_roc, tree_test_data_1[[target]],
-pred_train_roc, tree_train_data_1[[target]])
+plot_roc(pred_train_roc[, 1],
+         train_data$player_type,
+         pred_test_roc[, 1],
+         test_data$player_type)
 ```
 
 
