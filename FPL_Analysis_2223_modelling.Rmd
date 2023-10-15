@@ -507,7 +507,7 @@ grid.arrange(grobs = Nplotlist, ncol = 2)
 # store the top performing categorical variables.
 select_cat_result <- tribble(~ feature,  ~ pred, ~ deviance)
 
-minDrop <- 10 
+minDrop <- 10
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   devDrop <-
@@ -700,15 +700,11 @@ main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=po
 
 ```
 ### Decision Tree
-<<<<<<< HEAD
-- Build decision tree for all variables
 
 the performance on the test set is slightly better than on the training set,
-=======
 
 ###For the combined variables - 1 
 - Build the model
->>>>>>> c13cdf52f5c52e2d5500c195e6dd32771c5df6d2
 ```{r decision_tree_combined_1}
 tree_train_data_1 <-  train_data %>%
   select(all_of(c(target, combined_features)))
@@ -716,7 +712,6 @@ tree_train_data_1 <-  train_data %>%
 tree_test_data_1 <- test_data %>%
   select(all_of(c(target, combined_features)))
 
-<<<<<<< HEAD
 tmodel <- rpart(player_type ~., data=tree_train_data_1, method = 'class')
 
 trainPredictions <- predict(tmodel, newdata=tree_train_data_1, type = "class")
@@ -729,13 +724,6 @@ testPredictions <- predict(tmodel, newdata=tree_test_data_1, type = "class")
 print(calcAUC(as.numeric(testPredictions), tree_test_data_1[, target]))
 testAccuracy <- mean(testPredictions == tree_test_data_1$player_type)
 print(paste("Test Accuracy:", testAccuracy))
-=======
-fV <- paste(target,'> 0 ~ ',
-paste(c(catVars, numericVars), collapse=' + '),
-sep='')
-tmodel1 <- rpart(player_type ~., tree_train_data_1,method = 'class')
-rpart.plot(tmodel1)
->>>>>>> c13cdf52f5c52e2d5500c195e6dd32771c5df6d2
 
 ```
 - Performance Measures
