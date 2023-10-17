@@ -349,7 +349,6 @@ logNull <-
                 test_data[, target] == pos.label)
 
 cat("The log likelihood of the Null model is:", logNull)
-## The log likelihood of the Null model is: -47.80357
 ```
 
 ## Single Variable Model Build
@@ -643,157 +642,138 @@ rfe_features
 ## Multiple Variables
 
 ## Methods for evaluating models
-According to the multiple usage, we define a function so that we can do multiple performance calculations. This function includes several main methods. It will be used in the following sections and increase the efficiency of the code.
+According to the multiple usage, we define a function so that we can do multiple performance calculations. This function includes several main methods, such as confusion matrix, AUC, likelihood. It will be used in the following sections and increase the efficiency of the code. At the same time, it is convenient to compare the results of each model.
 
-```{r All performance_measures function}
-# Define functions
-#convert the target variable to numeric
-
-# ROC curve
-plot_roc <- function(predcol1, outcol1, predcol2, outcol2){
-roc_1 <- rocit(score=predcol1, class=outcol1==pos.label)
-roc_2 <- rocit(score=predcol2, class=outcol2==pos.label)
-plot(roc_1, col = c("lightblue","forestgreen"), lwd = 3,
-legend = FALSE,YIndex = FALSE, values = TRUE, asp=1)
-lines(roc_2$TPR ~ roc_2$FPR, lwd = 3,
-col = c("pink","forestgreen"), asp=1)
-legend("bottomright", col = c("lightblue","pink", "forestgreen"),
-c("Test Data", "Training Data", "Null Model"), lwd = 2)
+```{r main performance_measures function}
+#single performance result function
+single_performance <- function(pred, truth, name = "model") {
+  # data preparation
+  if (str_detect(name, "xgb")) {
+    pred_class <- ifelse(pred > 0.5, "Offensive", "Defensive")
+    truth_class <- ifelse(truth == 1, "Offensive", "Defensive")
+  }
+  factor_pred <- pred
+  if (class(pred) != "factor") {
+    if (str_detect(name, "xgb")) {
+      factor_pred <- as.factor(pred_class)
+    } else{
+      factor_pred <- as.factor(pred)
+    }
+  }
+  factor_truth <- truth
+  if (class(truth) != "factor") {
+      factor_truth <- as.factor(truth)
+  }
+  #metrics calculation
+  cm <- confusionMatrix(factor_pred, factor_truth)
+  accuracy <- cm$overall['Accuracy']
+  precision <- cm$byClass['Pos Pred Value']
+  recall <- cm$byClass['Sensitivity']
+  f1 <- cm$byClass['F1']
+  
+  if(str_detect(name, "tree")){
+    pred <- as.numeric(pred)
+  }
+  AUC <- calcAUC(pred, truth)
+  type_truth <- ifelse(truth == "Offensive", 1, 2)
+  likelihood <- logLikelihood(type_truth, pred)
+  #create a data frame to store the result
+  data.frame(
+    Model = name,
+    Accuracy = accuracy,
+    Precision = precision,
+    Recall = recall,
+    F1 = f1,
+    AUC = AUC,
+    Loglikelihood = likelihood
+  )
 }
-# 
-# plot_roc(pred_test_roc, dTest[[target]],
-# pred_train_roc, dTrain[[target]])
 
-#Confusion matrix - single
-cm_value <- function(pred, truth, name = "model") {
-   ctable <- table(truth = truth, pred = (pred < 2))
-   accuracy <- sum(diag(ctable)) / sum(ctable)
-   precision <- ctable[2, 2] / sum(ctable[, 2])
-   Recall <- ctable[2, 2] / sum(ctable[2, ])
-   F1 <- 2 * precision * Recall / (precision + Recall)
-   data.frame(Model = name, Precision = precision,
-              Recall = Recall,
-              F1 = F1, Accuracy = accuracy)}
-   
-#Confusion matrix - combined for training data and test data
-CM_metrics <- function(pred1, pred2,truth1,truth2, name="model", name1="model1"){
-  pred1_performance <- cm_value(pred1, truth1, name1)
-  pred2_performance <- cm_value(pred2, truth2, name)
-  result <- rbind(pred1_performance, pred2_performance)
-  print(result)
-}
-
+#combined all the result for training data and test data
+main_performance <-
+  function(pred1, pred2, truth1, truth2, name1, name2) {
+    pred1_performance <- single_performance(pred1, truth1, name1)
+    pred2_performance <- single_performance(pred2, truth2, name2)
+    result <- rbind(pred1_performance, pred2_performance)
+  }
 
 ```
 
-```{r All performance_measures function }
-#Define a performance measure function including AUC, AOC, Likelihood Ratio, Confusion Matrix
-main_performance <- function(pred_train,pred_test,truth_train,truth_test, pos=pos.label, name="model") { #calculate the AUC
-  auc_train <- calcAUC(pred_train, truth_train)
-  auc_test <- calcAUC(pred_test, truth_test)
-  cat("AUC for training data is", auc_train, "\n","AUC for test data is", auc_test, "\n")
-  #calculate the ROC
-  roc_plot <- plot_roc(pred_train, truth_train)
-  # print(roc_plot)
-  # likelihood_ratio <- logLikelihood(pred_train, truth_train)
-  # print(likelihood_ratio)
-  # confusionMatrix <- CM_metrics(pred, truth)
-  # print(confusionMatrix)
 
-}
-
-```
 ### Decision Tree
 
 the performance on the test set is slightly better than on the training set,
 
-###For the combined variables - 1 
-- Build the model
-```{r decision_tree_combined_1}
+- Build models
+```{r decision_tree models}
+#a tree model with the combined features by Concatenation - tmodel1
 tree_train_data_1 <-  train_data %>%
   select(all_of(c(target, combined_features)))
-
 tree_test_data_1 <- test_data %>%
   select(all_of(c(target, combined_features)))
-
-tmodel_1 <-
+tmodel1 <-
   rpart(player_type ~ ., data = tree_train_data_1, method = 'class')
 
-trainPredictions <-
-  predict(tmodel_1, newdata = tree_train_data_1, type = "class")
-print(calcAUC(as.numeric(trainPredictions), tree_train_data_1[, target]))
-trainAccuracy <-
-  mean(trainPredictions == tree_train_data_1$player_type)
-print(paste("Training Accuracy:", trainAccuracy))
-
-testPredictions <-
-  predict(tmodel_1, newdata = tree_test_data_1, type = "class")
-print(calcAUC(as.numeric(testPredictions), tree_test_data_1[, target]))
-testAccuracy <-
-  mean(testPredictions == tree_test_data_1$player_type)
-print(paste("Test Accuracy:", testAccuracy))
-
-```
-- Performance Measures
-```{r}
-
-```
-
-```{r}
-#Special data processing for decision tree before calculating the performance measures
-predict_train <- as.numeric(predict(tmodel_1, newdata=tree_train_data_1, type = "class"))
-predict_test <- as.numeric(predict(tmodel_1, newdata=tree_test_data_1, type = "class"))
-truth_train <- ifelse(tree_train_data_1$player_type == "Offensive", 1, 2)
-truth_test <- ifelse(tree_test_data_1$player_type == "Offensive", 1, 2)
-
-tmodel_performance <- main_performance(predict_train,predict_test,tree_train_data_1$player_type,tree_test_data_1$player_type, name="tmodel")
-
-```
-
-```{r confusion_matrix - metrics}
-#convert the target value to match the prediction value
-truth_train <- ifelse(tree_train_data_1$player_type == "Offensive", 1, 2)
-truth_test <- ifelse(tree_test_data_1$player_type == "Offensive", 1, 2)
-
-#print out the confusion matrix result for decision tree
-tcm1 <- CM_metrics(predict_train, predict_test,truth_train, truth_test, "tmodel-Train", "tmodel-Test")
-```
-###For the combined variables - 2
-- Build the model
-```{r decision_tree_combined_2}
-tree_train_data_2 <-  train_data %>% 
+#a tree model with the combined features by RFE - tmodel2
+tree_train_data_2 <-  train_data %>%
   select(all_of(c(target, rfe_features)))
-
-tree_test_data_2 <- test_data %>% 
+tree_test_data_2 <- test_data %>%
   select(all_of(c(target, rfe_features)))
-
-tmodel_2 <- rpart(player_type ~., data=tree_train_data_2, method = 'class')
-
-predict <- as.numeric(predict(tmodel_2, newdata=tree_train_data_2, type = "class"))
-
-print(calcAUC(predict, tree_train_data_2[, target]))
-
-predict <- as.numeric(predict(tmodel_2, newdata=tree_test_data_2, type = "class"))
-
-
-pp <- prediction(predict, tree_test_data_2[, target])
-
-
-print(calcAUC(predict, tree_test_data_2[, target]))
-
-rpart.plot(tmodel_2)
+tmodel2 <-
+  rpart(player_type ~ ., data = tree_train_data_2, method = 'class')
 ```
+
 - Performance Measures
 
-```{r AUC}
-#AUC score for the training data and test data
-predict_train <- as.numeric(predict(tmodel_2, newdata=tree_train_data_2, type = "class"))
-print(calcAUC(predict_train, train_data[, target]))
+```{r calculate prediction}
+# tmodel1 prediction
+trainPredictions1 <- predict(tmodel1, newdata=tree_train_data_1, type = "class")
+# auc_tmodel1_train <- calcAUC(as.numeric(trainPredictions1), tree_train_data_1[, target])
+testPredictions1 <- predict(tmodel1, newdata=tree_test_data_1, type = "class")
+# auc_tmodel1_test <- calcAUC(as.numeric(testPredictions1), tree_test_data_1[, target])
+# 
 
-predict_test <- as.numeric(predict(tmodel_2, newdata=tree_test_data_2, type = "class"))
-print(calcAUC(predict_test, test_data[, target]))
+# tmodel2 prediction
+trainPredictions2 <- predict(tmodel2, newdata=tree_train_data_2, type = "class")
+# auc_tmodel2_train <- calcAUC(as.numeric(trainPredictions2), tree_train_data_2[, target])
+testPredictions2 <- predict(tmodel2, newdata=tree_test_data_2, type = "class")
+# auc_tmodel2_test2 <- calcAUC(as.numeric(testPredictions2), tree_test_data_2[, target])  
 
 ```
+
+```{r}
+table_train_tmodel1<- table(train_data[, target], trainPredictions1)
+table_train_tmodel1
+```
+
+
+```{r tmodel main performance_measures function }
+#calculate the performance measures for tmodel1 and tmodel2
+t1 <-
+  main_performance(
+    trainPredictions1,
+    testPredictions1,
+    tree_train_data_1$player_type,
+    tree_test_data_1$player_type,
+    "tree_model1-Train",
+    "tree_model1-Test"
+  )
+
+t2 <-
+  main_performance(
+    trainPredictions2,
+    testPredictions2,
+    tree_train_data_2$player_type,
+    tree_test_data_2$player_type,
+    "tree_tmodel2-Train",
+    "tree_tmodel2-Test"
+  )
+
+tmodel_mainperformance <- rbind(t1, t2)
+tmodel_mainperformance
+```
+
+
 
 ```{r confusion_matrix}
 # table_train <- table(train_data[, target], predict_train)
@@ -801,13 +781,14 @@ print(calcAUC(predict_test, test_data[, target]))
 ```
 
 ```{r}
-# ROC curve
+# define a ROC curve function
 plot_roc <- function(predcol1, outcol1, predcol2, outcol2) {
   roc_1 <- rocit(score = predcol1, class = outcol1 == 'Defensive')
   roc_2 <- rocit(score = predcol2, class = outcol2 == 'Defensive')
+
   plot(
     roc_1,
-    col = c("lightblue", "forestgreen"),
+    col = c( "lightblue", "forestgreen"),
     lwd = 3,
     legend = FALSE,
     YIndex = FALSE,
@@ -817,28 +798,56 @@ plot_roc <- function(predcol1, outcol1, predcol2, outcol2) {
   lines(
     roc_2$TPR ~ roc_2$FPR,
     lwd = 3,
-    col = c("pink", "forestgreen"),
+    col = c("salmon", "forestgreen"),
     asp = 1
   )
   legend(
     "bottomright",
-    col = c("lightblue", "pink", "forestgreen"),
+    col = c("lightblue", "salmon", "forestgreen"),
     c("Test Data", "Training Data", "Null Model"),
     lwd = 2
   )
+  title(title)
 }
-pred_train_roc <- predict(tmodel_1, newdata = tree_train_data_1)
-pred_test_roc <- predict(tmodel_1, newdata = tree_test_data_1)
 
-plot_roc(pred_test_roc[, 1],
-         tree_test_data_1$player_type,
-         pred_train_roc[, 1],
-         tree_train_data_1$player_type)
+pred_train_roc1 <- predict(tmodel1, newdata = tree_train_data_1)
+pred_test_roc1 <- predict(tmodel1, newdata = tree_test_data_1)
+
+plot_roc(
+  pred_train_roc1[, 1],
+  train_data$player_type,
+  pred_test_roc1[, 1],
+  test_data$player_type,
+  title = "ROC for tmodel1 (features by Concatenation)"
+)
+
 ```
 
 
-### XGBoost
+```{r ROC curve - tmodel2}
+pred_train_roc2 <- predict(tmodel2, newdata = tree_train_data_2)
+pred_test_roc2 <- predict(tmodel2, newdata = tree_test_data_2)
 
+plot_roc(
+  pred_train_roc2[, 1],
+  train_data$player_type,
+  pred_test_roc2[, 1],
+  test_data$player_type,
+  title = "ROC for tmodel2 (features by RFE)"
+)
+```
+
+
+```{r Visualising the decision tree}
+rpart.plot(tmodel1)
+rpart.plot(tmodel2)
+```
+
+- Conclusion
+
+
+### XGBoost
+-Build XGBoost models for the two sets of features
 ```{r xgboost_combine_1}
 # convert categorical variables to factor
 xgb_train_data_1 <- train_data %>%
@@ -880,11 +889,16 @@ xgbmodel_1 <- xgboost(
 
 test_input_1 <- as.matrix(xgb_test_data_1[-c(1, 2)])
 
-train_pred_1 <- predict(xgbmodel_1, input_1)
-test_pred_1 <- predict(xgbmodel_1, test_input_1)
 
-print(calcAUC(train_pred_1, xgb_train_data_1[, target]))
-print(calcAUC(test_pred_1, xgb_test_data_1[, target]))
+train_pred_xgb1 <- predict(xgbmodel_1, input_1)
+train_pred_xgb1_class <- ifelse(train_pred_xgb1 > 0.5, "Offensive", "Defensive")
+
+test_pred_xgb1 <- predict(xgbmodel_1, test_input_1)
+test_pred_xgb1_class <- ifelse(test_pred_xgb1 > 0.5, "Offensive", "Defensive")
+
+
+print(calcAUC(train_pred_xgb1, xgb_train_data_1[, target]))
+print(calcAUC(test_pred_xgb1, xgb_test_data_1[, target]))
 # 
 # cv_results <- xgb.cv(
 #   data = as.matrix(train_data[, predictors]),
@@ -899,6 +913,7 @@ print(calcAUC(test_pred_1, xgb_test_data_1[, target]))
 
 
 ```
+
 
 ```{r xgboost_combine_2}
 # convert categorical variables to factor
@@ -936,14 +951,47 @@ xgbmodel_2 <- xgboost(
 
 test_input_2 <- as.matrix(xgb_test_data_2[-c(1, 2)])
 
-train_pred_2 <- predict(xgbmodel_2, input_2)
-test_pred_2 <- predict(xgbmodel_2, test_input_2)
+train_pred_xgb2 <- predict(xgbmodel_2, input_2)
+test_pred_xgb2 <- predict(xgbmodel_2, test_input_2)
 
-print(calcAUC(train_pred_2, xgb_train_data_2[, target]))
-print(calcAUC(test_pred_2, xgb_test_data_2[, target]))
+print(calcAUC(train_pred_xgb2, xgb_train_data_2[, target]))
+print(calcAUC(test_pred_xgb2, xgb_test_data_2[, target]))
 
 
 
+```
+
+- Performance for the above 2 models
+```{r confusion_matrix table}
+#singlexgb<- single_performance(train_pred_xgb1, xgb_train_data_1$player_type,"xgb-Train")
+xgb1_perf <- main_performance(train_pred_xgb1, test_pred_xgb1, xgb_train_data_1$player_type, xgb_test_data_1$player_type, "xgb1-Train","xgb1-Test")
+xgb2_perf <- main_performance(train_pred_xgb2, test_pred_xgb2, xgb_train_data_2$player_type, xgb_test_data_2$player_type, "xgb2-Train","xgb2-Test")
+
+xgb_pref <- rbind(xgb1_perf, xgb2_perf)
+xgb_pref
+```
+
+
+```{r ROC - xgb1}
+pred_train_roc_xgb1 <- predict(xgbmodel_1, newdata = input_1)
+pred_test_roc_xgb1 <- predict(xgbmodel_1, newdata = test_input_1)
+
+plot_roc(pred_train_roc_xgb1,
+         train_data$player_type,
+         pred_test_roc_xgb1,
+         test_data$player_type,
+         title = "ROC for XGBoost1 (features by Concatenation)")
+```
+222
+```{r ROC - xgb2}
+pred_train_roc_xgb2 <- predict(xgbmodel_2, newdata = input_2)
+pred_test_roc_xgb2 <- predict(xgbmodel_2, newdata = test_input_2)
+
+plot_roc(pred_train_roc_xgb2,
+         train_data$player_type,
+         pred_test_roc_xgb2,
+         test_data$player_type,
+         title = "ROC for XGBoost2 (features by RFE)")
 ```
 
 
