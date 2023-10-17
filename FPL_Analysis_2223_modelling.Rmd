@@ -1,5 +1,5 @@
 ---
-title: "FPL_Analysis_2223_modelling"
+title: "CITS4009 - Project 2"
 author: 
 - "Tong LAN (24056082)"
 - "Hanyu XUE (24070974)"
@@ -783,8 +783,8 @@ tmodel_mainperformance
 ```{r}
 # define a ROC curve function
 plot_roc <- function(predcol1, outcol1, predcol2, outcol2, title) {
-  roc_1 <- rocit(score = predcol1, class = outcol1 == 'Defensive')
-  roc_2 <- rocit(score = predcol2, class = outcol2 == 'Defensive')
+  roc_1 <- rocit(score = predcol1, class = outcol1 == 'Offensive')
+  roc_2 <- rocit(score = predcol2, class = outcol2 == 'Offensive')
 
   plot(
     roc_1,
@@ -1341,20 +1341,15 @@ clustering_OHE <- function(data) {
   # find all categorical cols
   colname <- names(data)
   cat_col_char <- str_split(colname[sapply(data[, colname], class) %in% c('factor', 'character')], " ")
-  cat_col <- c("position", "direct_freekicks_order", "corners_and_indirect_freekicks_order", "penalties_order")
-  # for (i in 1:length(cat_col_char)) {
-  #     value = cat_col_char[[i]]
-  #     print(1)
-  #     print(value)
-  #     cat_col <- c(cat_col, value)
-  # }
-  # print(cat_col)
+  cat_col <- c()
+  for (i in 1:length(cat_col_char)) {
+      value = cat_col_char[[i]]
+      cat_col <- c(cat_col, value)
+  }
   # one hot encoding
   encoded_data <- dummyVars(paste("~", paste(cat_col, collapse = "+")), data = data) %>%
     predict(newdata = data)
-  
   return_data <- cbind(encoded_data, data[, -which(names(data) %in% cat_col)])
-  
   return(return_data)
 }
 ```
