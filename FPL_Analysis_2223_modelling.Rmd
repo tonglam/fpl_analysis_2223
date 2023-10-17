@@ -329,49 +329,28 @@ offensive and defensive
 
 ## Single Variable
 
-## Null Model and Single Variable Model Evaluation
 
-#### LogLikelihood
-
-```{r calculate_log_likelihood}
-# define compute function - likelihood
-logLikelihood <- function(ypred, ytrue) {
-  sum(ifelse(ytrue, log(ypred), log(1 - ypred)), na.rm = T)
-}
-```
-
-- Evaluate the performance by log likelihood
-
-```{r null_log_likelihood}
-# Compute the likelihood of the Null model on the test data
-logNull <-
-  logLikelihood(sum(test_data[, target] == pos.label) / nrow(test_data),
-                test_data[, target] == pos.label)
-
-cat("The log likelihood of the Null model is:", logNull)
-```
 
 ## Single Variable Model Build
 
 ### Categorical
-- Create a predict function for categorical
+- Build model 
 
 ```{r categorical_predictions}
+#define a predict function for categorical variables
 mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   pPos <- sum(outCol == pos) / length(outCol)
   naTab <- table(as.factor(outCol[is.na(varCol)]))
   pPosWna <- (naTab / sum(naTab))[pos]
   vTab <- table(as.factor(outCol), varCol)
-  pPosWv <- (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+  pPosWv <- (vTab[pos, ] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
   pred
 }
-```
 
-```{r call_categorical_prediction}
-# call the predict function for the candidate columns
+# call the function for the candidate columns
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   train_data[, pi] <-
@@ -381,7 +360,7 @@ for (v in catVars) {
 }
 ```
 
-- Evaluate the categorical performance by AUC
+- Evaluate the performance by AUC
 
 ```{r calculate_AUC}
 # define compute function - AUC
@@ -392,51 +371,98 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 
 # define plot function - AUC
 plotAUC <- function(data, target, feature) {
- data %>%
-  ggplot(aes(x = data[[feature]], color = as.factor(target))) + 
-  geom_density() +
-  xlab(feature)
+  data %>%
+    ggplot(aes(x = data[[feature]], color = as.factor(target))) +
+    geom_density() +
+    xlab(feature)
 }
-```
 
-
-```{r call_categorical_AUC}
-catResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
-
+#create a data frame to store the results
+catResult <- tribble( ~ feature, ~ pred, ~ trainAUC, ~ testAUC)
+#call function to calculate AUC
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
   aucTrain <- calcAUC(train_data[, pi], train_data[, "player_type"])
   aucTest <- calcAUC(test_data[, pi], test_data[, "player_type"])
   result <- sprintf("%s: trainAUC: %4.3f; TestAUC: %4.3f",
-                          pi, aucTrain, aucTest)
+                    pi, aucTrain, aucTest)
   catResult <-
-    add_row(catResult,
-            feature = pi,
-            pred = result,
-            trainAUC = aucTrain,
-            testAUC = aucTest)
+    add_row(
+      catResult,
+      feature = pi,
+      pred = result,
+      trainAUC = aucTrain,
+      testAUC = aucTest
+    )
 }
 
-# sort by train AUC desc, then test AUC desc
+# sort the features by train AUC desc, then test AUC desc
 catResult <- arrange(catResult, desc(trainAUC), desc(testAUC))
 catResult
 ```
 
-- further explore the AUC values of the above categorical columns
+- Plotting the density plot for predicted probabilities
 
 ```{r  density plot for AUC values (categorical)}
+#call function to plot AUC
 catAUC1 <- plotAUC(test_data, test_data$player_type, "pred_penalties_order")
 catAUC2 <- plotAUC(test_data, test_data$player_type, "pred_corners_and_indirect_freekicks_order")
 catAUC3 <- plotAUC(test_data, test_data$player_type, "pred_direct_freekicks_order")
 grid.arrange(catAUC1, catAUC2, catAUC3, ncol = 2)
 ```
+- Plotting the ROC
 
+```{r ROC categorical}
+# define a roc plotting function for single variable model
+plot_roc_sa <-
+  function(predcols,
+           outcols,
+           colors = c("salmon", "lightblue", "lemonchiffon", "seagreen","orchid","lightpink"),
+           overlaid = F,
+           features,
+           title) {
+    
+    for (i in 1:length(predcols)){
+    par(new = overlaid)
+    ROCit_obj <- rocit(score = predcols[[i]], class = outcols[[i]] == pos.label)
+    plot(
+      ROCit_obj,
+      col = c(colors[i], 1),
+      legend = FALSE,
+      YIndex = FALSE,
+      values = FALSE
+    ) 
+    title(title)}
+    legend(
+      "bottomright",
+      legend = features,
+      col = colors,
+      lty = 1
+    )
+  }
+
+plot_roc_sa(
+  predcols = list(
+    test_data$pred_penalties_order,
+    test_data$pred_corners_and_indirect_freekicks_order,
+    test_data$pred_direct_freekicks_order
+  ),
+  outcols = list(test_data[, target], test_data[, target], test_data[, target]),
+  features = c("pred_penalties_order", "pred_corners_and_indirect_freekicks_order", "pred_direct_freekicks_order"),
+  title = "ROC for single variable (Categorical)",
+  overlaid = TRUE
+)
+
+``` 
+
+- Conclusion:
 The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
 
 ### Numerical
-- Create a predict function for numerical
+- Build model 
 
 ```{r numerical_predictions}
+#define a predict function for numerical variables
 mkPredN <- function(outCol, varCol, appCol) {
   cuts <- unique(quantile(varCol, probs = seq(0, 1, 0.1), na.rm = T))
   varC <- cut(varCol, cuts)
@@ -448,9 +474,9 @@ mkPredN <- function(outCol, varCol, appCol) {
 - Evaluate the performance by AUC
 
 ```{r call_numerical_AUC}
-# create a list to store the result
-numResult <- tribble( ~ feature, ~ pred, ~ trainAUC, ~ testAUC)
-
+# create a data frame to store the result
+numResult <- tribble(~ feature, ~ pred, ~ trainAUC, ~ testAUC)
+# call function to calculate AUC
 for (v in numericVars) {
   pi <- paste('pred_', v, sep = '')
   train_data[, pi] <-
@@ -474,12 +500,12 @@ for (v in numericVars) {
   }
 }
 
-# sort by train AUC desc, then test AUC desc
+# sort the features by train AUC desc, then test AUC desc
 numResult <- arrange(numResult, desc(trainAUC), desc(testAUC))
 numResult['pred']
 ```
 
-- further explore the AUC values of the above numerical columns
+- Plotting the density plot for AUC values
 ```{r  density plot for AUC values (numerical)}
 # define a function - get the column name
 extract_column <- function(tribble, column) {
@@ -492,19 +518,58 @@ extract_column <- function(tribble, column) {
   return(result)
 }
 
-# call the functions to plot the density plot
+#create a list to store the features
 Nplotlist <- list()
+# call the functions to plot the density plot
 Ncol <- str_split(extract_column(numResult, "feature"), ", ")[[1]]
+#according to the above auc performance, choose the top 6 features and plot
 for (col in Ncol[1:6]) {
   plot <- plotAUC(test_data, test_data$player_type, col)
   Nplotlist <- c(Nplotlist, list(plot))
-
+  
 }
 
 grid.arrange(grobs = Nplotlist, ncol = 2)
 ```
+- Plotting the ROC
+```{r roc numerical}
+#plot the top 6 features
+plot_roc_sa(
+  predcols = list(
+    test_data$pred_expected_goal_involvements_per_90,
+    test_data$pred_threat_per_90,
+    test_data$pred_expected_goals_per_90,
+    test_data$pred_creativity_per_90,
+    test_data$pred_expected_assists_per_90,
+    test_data$pred_starts_per_90
+  ),
+  outcols = list(test_data[, target], test_data[, target], test_data[, target], test_data[, target], test_data[, target], test_data[, target]),
+  features = c("pred_expected_goal_involvements_per_90", "pred_threat_per_90", "pred_expected_goals_per_90","pred_creativity_per_90","pred_expected_assists_per_90","pred_starts_per_90"),
+  title = "ROC for single variable(Numerical)",
+  overlaid = TRUE
+)
 
-### likelihood ratio test
+```
+- Conclusion:
+The result shows 6 of the features have similar score by AUC. "pred_expected_goal_involvements_per_90" is the highest AUC score.
+
+## Null Model and Single Variable Model Evaluation
+
+#### LogLikelihood
+
+```{r log_likelihood}
+# define compute function - log likelihood
+logLikelihood <- function(ypred, ytrue,epsilon=1e-6) {
+  sum(ifelse(ytrue, log(ypred), log(1 - ypred-epsilon)), na.rm = T)
+}
+
+# Compute the likelihood of the Null model on the test data
+logNull <-
+  logLikelihood(sum(test_data[, target] == pos.label) / nrow(test_data),
+                test_data[, target] == pos.label)
+
+cat("The log likelihood of the Null model is:", logNull)
+```
 
 ```{r calculate_categorical_likelihood}
 # store the top performing categorical variables.
@@ -513,16 +578,16 @@ select_cat_result <- tribble(~ feature,  ~ pred, ~ deviance)
 minDrop <- 10
 for (v in catVars) {
   pi <- paste('pred_', v, sep = '')
-  devDrop <-
+  devselect <-
     2 * (logLikelihood(test_data[, pi], test_data[, target] == pos.label) - logNull)
-  if (devDrop >= minDrop) {
-    result <- sprintf("%6s, deviance reduction: %g", v, devDrop)
+  if (devselect >= minDrop) {
+    result <- sprintf("%6s, deviance reduction: %g", v, devselect)
     select_cat_result <-
       add_row(
         select_cat_result,
         feature = v,
         pred = result,
-        deviance = devDrop
+        deviance = devselect
       )
   }
 }
@@ -531,6 +596,7 @@ for (v in catVars) {
 select_cat_result <- arrange(select_cat_result, desc(deviance))
 select_cat_result
 ```
+The result from categorical, penalties_order ...low deviance...,highest AUC(train0.56/test0.61).... 这里对上面这个数据写个结论，主要是结合前面的auc进行描述一下。
 
 ```{r calculate_numerical_likelihood}
 # separate the expected and actual numerical columns
@@ -579,6 +645,9 @@ sel_num_result <-
 sel_num_result$pred
 numericVars <- numericVars[!numericVars %in% actualVars]
 ```
+- Conclusion
+The lower the deviance, the better the model.
+
 
 ## Feature Selection
 
@@ -650,7 +719,7 @@ single_performance <- function(pred, truth, name = "model") {
   # data preparation
   if (str_detect(name, "xgb")) {
     pred_class <- ifelse(pred > 0.5, "Offensive", "Defensive")
-    truth_class <- ifelse(truth == 1, "Offensive", "Defensive")
+    truth_class <- ifelse(truth > 0.5, "Offensive", "Defensive")
   }
   factor_pred <- pred
   if (class(pred) != "factor") {
@@ -1462,11 +1531,11 @@ kmCritframe <- data.frame(k = 1:10,
                           ch = kmClustering.ch$crit,
                           asw = kmClustering.asw$crit)
 fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-  geom_point() + geom_line(colour = "red") +
+  geom_point() + geom_line(colour = "salmon") +
   scale_x_continuous(breaks = 1:10, labels = 1:10) +
   labs(y = "CH index") + theme(text = element_text(size = 20))
 fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-  geom_point() + geom_line(colour = "blue") +
+  geom_point() + geom_line(colour = "dodgerblue") +
   scale_x_continuous(breaks = 1:10, labels = 1:10) +
   labs(y = "ASW") + theme(text = element_text(size = 20))
 grid.arrange(fig1, fig2, nrow = 1)
