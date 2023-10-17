@@ -32,6 +32,9 @@ library(ROCit)
 library(pander)
 library(xgboost)
 library(lime)
+library(factoextra)
+library(fpc)
+library(grDevices)
 ```
 # Data Preprocessing
 
@@ -269,7 +272,7 @@ preprocess_target_donut <- function(data) {
 ```{r read_data, message=FALSE}
 fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
 
-model_data <- fpl_raw_data %>% 
+classification_data <- fpl_raw_data %>% 
   preprocess_init_transform() %>% 
   preprocess_init_handle_NAs() %>%
   preprocess_further_transform() %>%
@@ -277,15 +280,15 @@ model_data <- fpl_raw_data %>%
   preprocess_target_value()
 
 # target value plot
-model_data %>% preprocess_target_barplot(model_data$player_type)
-model_data %>% preprocess_target_donut()
+classification_data %>% preprocess_target_barplot(classification_data$player_type)
+classification_data %>% preprocess_target_donut()
 
 
 # remove raw data
 rm(fpl_raw_data)
 
-# str(model_data)
-# summary(model_data)
+# str(classification_data)
+# summary(classification_data)
 
 # knitr::kable()
 ```
@@ -300,9 +303,9 @@ rm(fpl_raw_data)
 ```{r split_data}
 # do a 90/10 split to form the training and test sets.
 set.seed(500)
-fortrain <- runif(nrow(model_data)) < 0.9
-train_data <- model_data[fortrain, ]
-test_data <- model_data[!fortrain, ]
+fortrain <- runif(nrow(classification_data)) < 0.9
+train_data <- classification_data[fortrain, ]
+test_data <- classification_data[!fortrain, ]
 
 # prepare the data for modelling
 outCol <- names(train_data)[-c(1, 2)]
@@ -644,7 +647,7 @@ According to the multiple usage, we define a function so that we can do multiple
 ```{r main performance_measures function}
 #single performance result function
 single_performance <- function(pred, truth, name = "model") {
-  # prepare
+  # data preparation
   if (str_detect(name, "xgb")) {
     pred_class <- ifelse(pred > 0.5, "Offensive", "Defensive")
     truth_class <- ifelse(truth == 1, "Offensive", "Defensive")
@@ -661,6 +664,7 @@ single_performance <- function(pred, truth, name = "model") {
   if (class(truth) != "factor") {
       factor_truth <- as.factor(truth)
   }
+  #metrics calculation
   cm <- confusionMatrix(factor_pred, factor_truth)
   accuracy <- cm$overall['Accuracy']
   precision <- cm$byClass['Pos Pred Value']
@@ -673,6 +677,7 @@ single_performance <- function(pred, truth, name = "model") {
   AUC <- calcAUC(pred, truth)
   type_truth <- ifelse(truth == "Offensive", 1, 2)
   likelihood <- logLikelihood(type_truth, pred)
+  #create a data frame to store the result
   data.frame(
     Model = name,
     Accuracy = accuracy,
@@ -721,21 +726,19 @@ tmodel2 <-
 - Performance Measures
 
 ```{r calculate prediction}
-# tmodel1
+# tmodel1 prediction
 trainPredictions1 <- predict(tmodel1, newdata=tree_train_data_1, type = "class")
 # auc_tmodel1_train <- calcAUC(as.numeric(trainPredictions1), tree_train_data_1[, target])
 testPredictions1 <- predict(tmodel1, newdata=tree_test_data_1, type = "class")
 # auc_tmodel1_test <- calcAUC(as.numeric(testPredictions1), tree_test_data_1[, target])
 # 
-#   cat("tmodel1-AUC for training data is", auc_tmodel1_train, "\n","tmodel1-AUC for test data is", auc_tmodel1_test, "\n")
-# 
-# tmodel2
+
+# tmodel2 prediction
 trainPredictions2 <- predict(tmodel2, newdata=tree_train_data_2, type = "class")
 # auc_tmodel2_train <- calcAUC(as.numeric(trainPredictions2), tree_train_data_2[, target])
 testPredictions2 <- predict(tmodel2, newdata=tree_test_data_2, type = "class")
 # auc_tmodel2_test2 <- calcAUC(as.numeric(testPredictions2), tree_test_data_2[, target])  
-# 
-#   cat("tmodel2-AUC for training data is", auc_tmodel2_train, "\n","tmodel2-AUC for test data is", auc_tmodel2_test2, "\n")
+
 ```
 
 ```{r}
@@ -772,11 +775,17 @@ tmodel_mainperformance
 
 
 
-```{r ROC curve - tmodel1}
-#define a function to plot the ROC curve
-plot_roc <- function(predcol1, outcol1, predcol2, outcol2,title="") {
-  roc_1 <- rocit(score = predcol1, class = outcol1 == 'Offensive')
-  roc_2 <- rocit(score = predcol2, class = outcol2 == 'Offensive')
+```{r confusion_matrix}
+# table_train <- table(train_data[, target], predict_train)
+# table_train
+```
+
+```{r}
+# define a ROC curve function
+plot_roc <- function(predcol1, outcol1, predcol2, outcol2) {
+  roc_1 <- rocit(score = predcol1, class = outcol1 == 'Defensive')
+  roc_2 <- rocit(score = predcol2, class = outcol2 == 'Defensive')
+
   plot(
     roc_1,
     col = c( "lightblue", "forestgreen"),
@@ -800,14 +809,18 @@ plot_roc <- function(predcol1, outcol1, predcol2, outcol2,title="") {
   )
   title(title)
 }
+
 pred_train_roc1 <- predict(tmodel1, newdata = tree_train_data_1)
 pred_test_roc1 <- predict(tmodel1, newdata = tree_test_data_1)
 
-plot_roc(pred_train_roc1[, 1],
-         train_data$player_type,
-         pred_test_roc1[, 1],
-         test_data$player_type,
-         title = "ROC for tmodel1 (features by Concatenation)")
+plot_roc(
+  pred_train_roc1[, 1],
+  train_data$player_type,
+  pred_test_roc1[, 1],
+  test_data$player_type,
+  title = "ROC for tmodel1 (features by Concatenation)"
+)
+
 ```
 
 
@@ -815,11 +828,13 @@ plot_roc(pred_train_roc1[, 1],
 pred_train_roc2 <- predict(tmodel2, newdata = tree_train_data_2)
 pred_test_roc2 <- predict(tmodel2, newdata = tree_test_data_2)
 
-plot_roc(pred_train_roc2[, 1],
-         train_data$player_type,
-         pred_test_roc2[, 1],
-         test_data$player_type,
-         title = "ROC for tmodel2 (features by RFE)")
+plot_roc(
+  pred_train_roc2[, 1],
+  train_data$player_type,
+  pred_test_roc2[, 1],
+  test_data$player_type,
+  title = "ROC for tmodel2 (features by RFE)"
+)
 ```
 
 
@@ -853,16 +868,6 @@ xgb_test_data_1 <- test_data %>%
 
 input_1 <- as.matrix(xgb_train_data_1[-c(1, 2)])
 
-# 
-# (NROUNDS <- which.min(evalframe$test_logloss_mean))
-# 
-# ggplot(evalframe, aes(x = iter, y = test_logloss_mean)) +
-#   geom_line() +
-#   geom_vline(xintercept = NROUNDS,
-#              color = "darkred",
-#              linetype = 2) +
-#   ggtitle("Cross-validated log loss as a function of ensemble size")
-
 xgb_params <- list(
     objective = "binary:logistic",
     eval_metric = "auc",
@@ -877,23 +882,10 @@ xgbmodel_1 <- xgboost(
   data = input_1,
   label = xgb_train_data_1$type,
   params = xgb_params,
-  nrounds = 100,
+  nrounds = 10,
   early_stopping_rounds = 10,
   verbose = 0
 )
-
-cv_1 <- xgb.cv(
-  data = input_1,
-  label = xgb_train_data_1$type,
-  params = xgb_params,
-  nrounds = 100,
-  nfold = 5,
-  stratified = TRUE
-)
-
-evalframe_1 <- as.data.frame(cv_1$evaluation_log)
-
-head(evalframe_1)
 
 test_input_1 <- as.matrix(xgb_test_data_1[-c(1, 2)])
 
@@ -903,6 +895,7 @@ train_pred_xgb1_class <- ifelse(train_pred_xgb1 > 0.5, "Offensive", "Defensive")
 
 test_pred_xgb1 <- predict(xgbmodel_1, test_input_1)
 test_pred_xgb1_class <- ifelse(test_pred_xgb1 > 0.5, "Offensive", "Defensive")
+
 
 print(calcAUC(train_pred_xgb1, xgb_train_data_1[, target]))
 print(calcAUC(test_pred_xgb1, xgb_test_data_1[, target]))
@@ -952,22 +945,9 @@ xgbmodel_2 <- xgboost(
   data = input_2,
   label = xgb_train_data_2$type,
   params = xgb_params,
-  nrounds = 100,
+  nrounds = 10,
   verbose = FALSE
 )
-
-cv_2 <- xgb.cv(
-  data = input_2,
-  label = xgb_train_data_1$type,
-  params = xgb_params,
-  nrounds = 100,
-  nfold = 5,
-  stratified = TRUE
-)
-
-evalframe_2 <- as.data.frame(cv_2$evaluation_log)
-
-head(evalframe_2)
 
 test_input_2 <- as.matrix(xgb_test_data_2[-c(1, 2)])
 
@@ -1044,52 +1024,500 @@ print(explanation_2)
 plot_features(explanation_2)
 plot_explanations(explanation_2)
 ```
+
 ## Performance Improve
 improve the models performances by implementing such measures:
 - increase the training data size
 - cross validation
 
-```{r merge_data}
+```{r join_data}
 # read new data
 fpl_raw_data_1 <- read.csv("./FPL_Dataset_2022-2023.csv")
 fpl_raw_data_2 <- read.csv("./FPL_Dataset_2023-2024.csv")
+
 # merge
-common_columns <- intersect(names(fpl_raw_data_1), names(fpl_raw_data_2))
-fpl_raw_data <- merge(fpl_raw_data_1, fpl_raw_data_2, by = intersect(names(fpl_raw_data_1)), names(fpl_raw_data_2))
+diff_columns <- setdiff(names(fpl_raw_data_2), names(fpl_raw_data_1))
+fpl_raw_data_2 <- fpl_raw_data_2[, -which(names(fpl_raw_data_2) %in% diff_columns)]
+fpl_raw_data <- union(fpl_raw_data_1, fpl_raw_data_2)
 
-head(fpl_raw_data)
+join_classification_data <- fpl_raw_data %>% 
+  preprocess_init_transform() %>% 
+  preprocess_init_handle_NAs() %>%
+  preprocess_further_transform() %>%
+  preprocess_further_handle_NAs() %>%
+  preprocess_target_value()
+
+# target value plot
+join_classification_data %>% preprocess_target_barplot(join_classification_data$player_type)
+join_classification_data %>% preprocess_target_donut()
+
+# remove raw data
+rm(fpl_raw_data_1)
+rm(fpl_raw_data_2)
+
+head(join_classification_data)
 ```
+## Cross Validation
 
-```{r preprocess_data}
+```{r cross_validation}
+# decision tree
+cv_decision_tree <-
+  function(fold_train,
+           fold_validation,
+           decision_tree_metrics) {
+    # build model
+    fold_tree_model <-
+      rpart(player_type ~ ., data = fold_train, method = 'class')
+    # evaluation each fold
+    predictions <-
+      predict(fold_tree_model, newdata = fold_validation, type = "class")
+    
+    fold_train_prediction <-
+      predict(fold_tree_model, newdata = fold_train, type = "class")
+    fold_train_auc <-
+      calcAUC(as.numeric(fold_train_prediction), fold_train[, target])
+    
+    fold_validation_prediction <-
+      predict(fold_tree_model, newdata = fold_validation, type = "class")
+    fold_validation_auc <-
+      calcAUC(as.numeric(fold_validation_prediction), fold_validation[, target])
+    
+    decision_tree_metrics <-
+      c(decision_tree_metrics, fold_train_auc, fold_validation_auc)
+    
+    return(decision_tree_metrics)
+  }
 
-# model_data <- fpl_raw_data %>% 
-#   preprocess_init_transform() %>% 
-#   preprocess_init_handle_NAs() %>%
-#   preprocess_further_transform() %>%
-#   preprocess_further_handle_NAs() %>%
-#   preprocess_target_value()
-# 
-# # target value plot
-# model_data %>% preprocess_target_barplot(model_data$player_type)
-# model_data %>% preprocess_target_donut()
-# 
-# 
-# # remove raw data
-# rm(fpl_raw_data)
-# 
-# # str(model_data)
-# # summary(model_data)
-# 
-# # knitr::kable()
+final_decision_tree <-
+  function(join_train,
+           join_test,
+           decision_tree_metrics) {
+    mean_train_auc <-
+      mean(decision_tree_metrics[seq(1, length(decision_tree_metrics), 2)])
+    mean_validation_auc <-
+      mean(decision_tree_metrics[seq(2, length(decision_tree_metrics), 2)])
+    sd_train_auc <-
+      sd(decision_tree_metrics[seq(1, length(decision_tree_metrics), 2)])
+    sd_validation_auc <-
+      sd(decision_tree_metrics[seq(2, length(decision_tree_metrics), 2)])
+    
+    cat("Cross-Validation Results:\n")
+    cat("Mean Train AUC:", mean_train_auc, "\n")
+    cat("Mean Validation AUC:", mean_validation_auc, "\n")
+    cat("Standard Deviation of Train AUC:", sd_train_auc, "\n")
+    cat("Standard Deviation of Validation AUC:",
+        sd_validation_auc,
+        "\n")
+    
+    # train the final decision tree model
+    final_tree_model <- rpart(player_type ~ ., data = join_train)
+    
+    # evaluate the final model
+    final_train_predictions <-
+      predict(final_tree_model, newdata = join_train, type = "class")
+    final_train_auc <-
+      calcAUC(as.numeric(final_train_predictions), join_train[, target])
+    final_test_predictions <-
+      predict(final_tree_model, newdata = join_test, type = "class")
+    final_test_auc <-
+      calcAUC(as.numeric(final_test_predictions), join_test[, target])
+    
+    cat("Final Decision Tree Model Evaluation on Training Set:\n")
+    cat("AUC:", final_train_auc, "\n")
+    cat("Final Decision Tree Model Evaluation on Testing Set:\n")
+    cat("AUC:", final_test_auc, "\n")
+  }
+
+# XGBoost
+cv_xgb <-
+  function(fold_train,
+           fold_validation,
+           xgb_params,
+           xgb_metrics) {
+    # build model
+    xgb_fold_train <- fold_train %>%
+      mutate(type = as.numeric(player_type == 'Offensive'), .after = player_type)
+    xgb_fold_validation <- fold_validation %>%
+      mutate(type = as.numeric(player_type == 'Offensive'), .after = player_type)
+    fold_train_input <- as.matrix(xgb_fold_train[-c(1, 2)])
+    fold_validation_input <- as.matrix(xgb_fold_validation[-c(1, 2)])
+    
+    fold_xgbmodel <- xgboost(
+      data = fold_train_input,
+      label = xgb_fold_train$type,
+      params = xgb_params,
+      nrounds = 100,
+      early_stopping_rounds = 10,
+      verbose = 0
+    )
+    
+    # evaluation each fold
+    fold_train_pred <- predict(fold_xgbmodel, fold_train_input)
+    fold_train_auc <- calcAUC(fold_train_pred, xgb_fold_train[, target])
+    fold_validation_pred <- predict(fold_xgbmodel, fold_validation_input)
+    fold_validation_auc <-
+      calcAUC(fold_validation_pred, fold_validation[, target])
+     xgb_metrics <-
+      c(xgb_metrics, fold_train_auc, fold_validation_auc)
+
+    return(xgb_metrics)
+  }
+
+final_xgb <-
+  function(join_train,
+           join_test,
+           xgb_params,
+           xgb_metrics) {
+    mean_train_auc <-
+      mean(xgb_metrics[seq(1, length(xgb_metrics), 2)])
+    mean_validation_auc <-
+      mean(xgb_metrics[seq(2, length(xgb_metrics), 2)])
+    sd_train_auc <-
+      sd(xgb_metrics[seq(1, length(xgb_metrics), 2)])
+    sd_validation_auc <-
+      sd(xgb_metrics[seq(2, length(xgb_metrics), 2)])
+    
+    cat("Cross-Validation Results:\n")
+    cat("Mean Train AUC:", mean_train_auc, "\n")
+    cat("Mean Validation AUC:", mean_validation_auc, "\n")
+    cat("Standard Deviation of Train AUC:", sd_train_auc, "\n")
+    cat("Standard Deviation of Validation AUC:",
+        sd_validation_auc,
+        "\n")
+    
+    # train the final XGBoost model
+    final_train <- join_train %>%
+      mutate(type = as.numeric(player_type == 'Offensive'), .after = player_type)
+    final_test <- join_test %>%
+      mutate(type = as.numeric(player_type == 'Offensive'), .after = player_type)
+    final_train_input <- as.matrix(final_train[-c(1, 2)])
+    final_test_input <- as.matrix(final_test[-c(1, 2)])
+    
+    final_xgbmodel <- xgboost(
+      data = final_train_input,
+      label = final_train$type,
+      params = xgb_params,
+      nrounds = 100,
+      early_stopping_rounds = 10,
+      verbose = 0
+    )
+    
+    # evaluate the final model
+    final_train_predictions <-
+      predict(final_xgbmodel, newdata = final_train_input, type = "class")
+    final_train_auc <-
+      calcAUC(as.numeric(final_train_predictions), join_train[, target])
+    final_test_predictions <-
+      predict(final_xgbmodel, newdata = final_test_input, type = "class")
+    final_test_auc <-
+      calcAUC(as.numeric(final_test_predictions), join_test[, target])
+    
+    cat("Final XGBoost Model Evaluation on Training Set:\n")
+    cat("AUC:", final_train_auc, "\n")
+    cat("Final XGBoost Model Evaluation on Testing Set:\n")
+    cat("AUC:", final_test_auc, "\n")
+  }
+
+set.seed(1414)
+
+# split data into train and test sets
+index <-
+  createDataPartition(join_classification_data$player_type, p = 0.8, list = FALSE)
+join_train <- join_classification_data[index,] %>% select(all_of(c(target, rfe_features)))
+join_train <- join_train[!rowSums(sapply(join_train, is.infinite)), ]
+join_test <- join_classification_data[-index,] %>% select(all_of(c(target, rfe_features)))
+join_test <- join_test[!rowSums(sapply(join_test, is.infinite)), ]
+
+# 100-fold cross-validation
+k <- 100
+folds <-
+  createFolds(
+    join_train$player_type,
+    k = k,
+    list = TRUE,
+    returnTrain = TRUE
+  )
+
+xgb_params <- list(
+      objective = "binary:logistic",
+      eval_metric = "auc",
+      lambda = 1,
+      alpha = 0.1,
+      max_depth = 3,
+      min_child_weight = 5,
+      eta = 0.1
+    )
+
+decision_tree_metrics <- c()
+xgb_metrics <- c()
+for (i in 1:k) {
+  fold_train <- join_train[folds[[i]], ]
+  fold_validation <- join_train[-folds[[i]], ]
+  # Decision Tree Model
+  decision_tree_metrics <-
+    cv_decision_tree(fold_train, fold_validation, decision_tree_metrics)
+  # XGBoost Model
+  xgb_metrics <-
+    cv_xgb(fold_train, fold_validation, xgb_params, xgb_metrics)
+  
+}
+
+final_decision_tree(join_train, join_test, decision_tree_metrics)
+final_xgb(join_train, join_test, xgb_params, xgb_metrics)
 ```
-
-
-## Decision Tree Model
-
-## XGBoost Model
 
 ## Discussion
 
-## Conclusion
-
 # Cluster
+
+## Clustering problem
+clustering different types of players based on their performance in the game
+
+## Data Preprocessing
+
+### Data Transform and cleaning
+```{r clustering_transform}
+clustering_transform <- function(data) {
+  data %>%
+    # remove irrelevant and noisy features
+    select(
+      -c(
+        "id",
+        "team",
+        "name",
+        "transfers_out",
+        "value_form",
+        "cost_change_start",
+        "news_added",
+        "cost_change_start_fall",
+        "ep_next",
+        "web_name",
+        "status",
+        "news",
+        "chance_of_playing_next_round",
+        "dreamteam_count",
+        "chance_of_playing_this_round",
+        "in_dreamteam",
+        "form",
+        "ep_this",
+        "transfers_in"
+      )
+    ) %>%
+    # drop highly related columns which can introduce redundancy
+    select(
+      -c(
+        "value_season",
+        "points_per_game",
+        "clean_sheets_per_90",
+        "expected_goals_per_90",
+        "expected_assists_per_90",
+        "starts_per_90",
+        "expected_goals_conceded_per_90",
+        "saves_per_90",
+        "expected_goal_involvements_per_90",
+        "expected_goals_per_90",
+        "goals_conceded_per_90",
+      )
+    ) %>%
+    select(-ends_with("rank")) %>%
+    select(-ends_with("rank_type")) %>%
+    mutate(
+      corners_and_indirect_freekicks_order = ifelse(
+        is.na(corners_and_indirect_freekicks_order),
+        "Non-Taker",
+        "Taker"
+      ),
+      penalties_order = ifelse(is.na(penalties_order), "Non-Taker", "Taker"),
+      direct_freekicks_order = ifelse(is.na(direct_freekicks_order), "Non-Taker", "Taker")
+    )
+}
+```
+
+
+### One Hot Encoding
+```{r clustering_OHE}
+clustering_OHE <- function(data) {
+  # find all categorical cols
+  colname <- names(data)
+  cat_col_char <- str_split(colname[sapply(data[, colname], class) %in% c('factor', 'character')], " ")
+  cat_col <- c("position", "direct_freekicks_order", "corners_and_indirect_freekicks_order", "penalties_order")
+  # for (i in 1:length(cat_col_char)) {
+  #     value = cat_col_char[[i]]
+  #     print(1)
+  #     print(value)
+  #     cat_col <- c(cat_col, value)
+  # }
+  # print(cat_col)
+  # one hot encoding
+  encoded_data <- dummyVars(paste("~", paste(cat_col, collapse = "+")), data = data) %>%
+    predict(newdata = data)
+  
+  return_data <- cbind(encoded_data, data[, -which(names(data) %in% cat_col)])
+  
+  return(return_data)
+}
+```
+
+
+## KMeans Clustering
+
+Applied K-Means Clustering in R
+https://www.youtube.com/watch?v=NKQpVU1LTm8
+
+```{r kmeans_clustering}
+# prepare data
+clustering_data <- fpl_raw_data %>%
+  clustering_transform() %>%
+  clustering_OHE()
+# scale
+scale_clustering_data <- scale(clustering_data)
+# distance
+clustering_data_dist <- dist(scale_clustering_data, upper = T)
+# calculate the optimal number of clusters
+fviz_nbclust(scale_clustering_data, kmeans, method = "wss")
+# clustering
+kmClusters <- kmeans(scale_clustering_data, centers = 4, iter.max=100, trace = T)
+kmClusters$centers
+kmClusters$size
+groups <- kmClusters$cluster
+# visualize
+clusters <- kmClusters$cluster
+fviz_cluster(list(data = scale_clustering_data, cluster = clusters))
+table(groups, fpl_raw_data$position)
+```
+## Evaluation Clustering Result
+
+```{r CH_index}
+sqr_euDist <- function(x, y) {
+  sum((x - y) ** 2)
+}
+
+wss <- function(clustermat) {
+  c0 <- colMeans(clustermat)
+  sum(apply(
+    clustermat,
+    1,
+    FUN = function(row) {
+      sqr_euDist(row, c0)
+    }
+  ))
+}
+
+
+wss_total <- function(scaled_df, labels) {
+  wss.sum <- 0
+  k <- length(unique(labels))
+  for (i in 1:k)
+    wss.sum <- wss.sum + wss(subset(scaled_df, labels == i))
+  wss.sum
+}
+
+tss <- function(scaled_df) {
+  wss(scaled_df)
+}
+
+CH_index <- function(scaled_df, kmax, method = "kmeans") {
+  if (!(method %in% c("kmeans", "hclust")))
+    stop("method must be one of c('kmeans', 'hclust')")
+  npts <- nrow(scaled_df)
+  wss.value <- numeric(kmax) # create a vector of numeric type
+  # wss.value[1] stores the WSS value for k=1 (when all the
+  # data points form 1 large cluster).
+  wss.value[1] <- wss(scaled_df)
+  if (method == "kmeans") {
+    # kmeans
+    for (k in 2:kmax) {
+      clustering <- kmeans(scaled_df, k, nstart = 10, iter.max = 100)
+      wss.value[k] <- clustering$tot.withinss
+    }
+  } else {
+    # hclust
+    d <- dist(scaled_df, method = "euclidean")
+    pfit <- hclust(d, method = "ward.D2")
+    for (k in 2:kmax) {
+      labels <- cutree(pfit, k = k)
+      wss.value[k] <- wss_total(scaled_df, labels)
+    }
+  }
+  bss.value <- tss(scaled_df) - wss.value # this is a vector
+  B <- bss.value / (0:(kmax - 1)) # also a vector
+  W <- wss.value / (npts - 1:kmax) # also a vector
+  data.frame(k = 1:kmax,
+             CH_index = B / W,
+             WSS = wss.value)
+}
+```
+
+
+```{r clustering_evaluation}
+kmClustering.ch <- kmeansruns(scale_clustering_data, krange=1:10, criterion="ch")
+kmClustering.ch$bestk
+
+kmClustering.asw <- kmeansruns(scale_clustering_data, krange=1:10, criterion="asw")
+kmClustering.asw$bestk
+
+
+hclusting <- CH_index(scale_clustering_data, 10, method="hclust")
+print(hclusting$CH_index)
+```
+
+```{r clustering_plot}
+kmCritframe <- data.frame(k = 1:10,
+                          ch = kmClustering.ch$crit,
+                          asw = kmClustering.asw$crit)
+fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
+  geom_point() + geom_line(colour = "red") +
+  scale_x_continuous(breaks = 1:10, labels = 1:10) +
+  labs(y = "CH index") + theme(text = element_text(size = 20))
+fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
+  geom_point() + geom_line(colour = "blue") +
+  scale_x_continuous(breaks = 1:10, labels = 1:10) +
+  labs(y = "ASW") + theme(text = element_text(size = 20))
+grid.arrange(fig1, fig2, nrow = 1)
+```
+```{r convex_hull}
+find_convex_hull <- function(proj2Ddf, groups) {
+  do.call(rbind,
+          lapply(
+            unique(groups),
+            FUN = function(c) {
+              f <- subset(proj2Ddf, cluster == c)
+              f[chull(f),]
+            }
+          ))
+}
+```
+
+
+```{r clustering_plot_2}
+fig <- c()
+kvalues <- seq(2, 5)
+nComp <- 2
+princ <- prcomp(scale_clustering_data)
+project2D <- as.data.frame(predict(princ, newdata=scale_clustering_data)[,1:nComp])
+for (k in kvalues) {
+  groups <- kmeans(scale_clustering_data, k, nstart = 100, iter.max = 100)$cluster
+  kmclust.project2D <- cbind(project2D,
+                             cluster = as.factor(groups),
+                             position = fpl_raw_data$position)
+  kmclust.hull <- find_convex_hull(kmclust.project2D, groups)
+  assign(
+    paste0("fig", k),
+    ggplot(kmclust.project2D, aes(x = PC1, y = PC2)) +
+      geom_point(aes(shape = cluster, color = cluster)) +
+      geom_polygon(
+        data = kmclust.hull,
+        aes(group = cluster, fill = cluster),
+        alpha = 0.4,
+        linetype = 0
+      ) +
+      labs(title = sprintf("k = %d", k)) +
+      theme(legend.position = "none", text = element_text(size = 20))
+  )
+}
+grid.arrange(fig2, fig3, fig4, fig5, nrow=2)
+```
+
+## Discussion
+
+# Conclusion
