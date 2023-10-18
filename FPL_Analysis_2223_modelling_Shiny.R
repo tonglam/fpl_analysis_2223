@@ -602,7 +602,7 @@ plot_roc_class <-
     
     for (i in 1:length(predcols)) {
       ROCit_obj <-
-        rocit(score = predcols[[i]], train_data[[target]] == 'Offensive')
+        rocit(score = predcols[[i]], test_data[, target] == 'Offensive')
       lines(ROCit_obj$TPR ~ ROCit_obj$FPR,
             col = colors[i],
             lwd = 3)
@@ -796,14 +796,12 @@ server <- function(input, output) {
       train_data = train_tree_data_cb1,
       test_data = test_tree_data_cb1,
       predcols = c(pred_train_tmodel1[, 2], pred_test_tmodel1[, 2]),
-      predcol_names = list("Prediction Set 1"),
       title = "ROC for tmodel1 (features by Concatenation)"
     ),
     list(
       train_data = train_tree_data_cb2,
       test_data = test_tree_data_cb2,
       predcols = c(pred_train_tmodel2[, 2], pred_test_tmodel2[, 2]),
-      predcol_names = list("Prediction Set 2"),
       title = "ROC for tmodel2 (features by Concatenation)"
     )
   )
@@ -823,19 +821,19 @@ server <- function(input, output) {
   #plot_roc_curve(train_xgb_data_cb1, test_xgb_data_cb1, combined_features)
   output$classification <-
     renderPlot({
-      par(new = TRUE)  # 允许叠加绘图
-      colors <- c("blue", "red")  # 指定不同颜色
-      for (i in 1:length(allmodel_sets)) {
-        set <- allmodel_sets[[i]]
-        plot_roc_class(
-          train_data = set$train_data,
-          test_data = set$test_data,
-          predcols = set$predcols,
-          colors = colors,  # 使用指定的颜色
-          title = set$title
-        )
-      }
-    })
+    par(new = TRUE)  # 允许叠加绘图
+    colors <- c("blue", "red")  # 指定不同颜色
+    for (i in 1:length(allmodel_sets)) {
+      set <- allmodel_sets[[i]]
+      plot_roc_class(
+        train_data = set$train_data,
+        test_data = set$test_data,
+        predcols = set$predcols,
+        colors = colors,  # 使用指定的颜色
+        title = set$title
+      )
+    }
+  })
   
   # clustering
   output$clustering <- renderPlot({
