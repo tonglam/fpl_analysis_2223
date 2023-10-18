@@ -1,4 +1,5 @@
 library(tidyverse)
+library(rpart)
 library(gridExtra)
 library(ROCR)
 library(ROCit)
@@ -198,8 +199,8 @@ class_transform <- function(data) {
 class_spilt <- function(data, ratio = spilt_ratio) {
   set.seed(500)
   fortrain <- runif(nrow(data)) < ratio
-  train_data <- data[fortrain,]
-  test_data <- data[!fortrain,]
+  train_data <- data[fortrain, ]
+  test_data <- data[!fortrain, ]
   outCol <- names(train_data)[-c(1, 2)]
   vars <- setdiff(outCol, c('player_type', "player_type_value"))
   return(list(train = train_data, test = test_data))
@@ -219,7 +220,7 @@ class_mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   naTab <- table(as.factor(outCol[is.na(varCol)]))
   pPosWna <- (naTab / sum(naTab))[pos]
   vTab <- table(as.factor(outCol), varCol)
-  pPosWv <- (vTab[pos, ] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+  pPosWv <- (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
@@ -242,7 +243,7 @@ class_mkPredN <- function(outCol, varCol, appCol) {
   pPosWna <- (naTab / sum(naTab))[pos]
   vTab <- table(as.factor(outCol), varCol)
   pPosWv <-
-    (vTab[pos, ] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+    (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
@@ -265,7 +266,7 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 }
 
 class_single_performance <- function(train_data, test_data, vars) {
-  result <- tribble(~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
+  result <- tribble( ~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
   categorical_vars <-
     vars[sapply(train_data[, vars], class) %in% c('factor', 'character')]
   numerical_vars <-
@@ -356,25 +357,27 @@ class_model_performance <- function(pred, truth, name = "model") {
 }
 
 tree_model <- function(train_data, test_data, selected_features) {
-  tree_train_data <-
-    train_data %>% select(all_of(c(target, selected_features)))
-  tree_test_data <-
-    test_data %>% select(all_of(c(target, selected_features)))
-  
   tree_model <-
-    rpart(player_type ~ ., data = tree_train_data, method = 'class')
+    rpart(player_type ~ ., data = train_data, method = 'class')
   
   train_pred <-
-    predict(tree_model, newdata = tree_train_data, type = "class")
+    predict(tree_model, newdata = train_data)
   test_pred <-
-    predict(tree_model, newdata = tree_test_data, type = "class")
+    predict(tree_model, newdata = test_data)
+  
+  train_pred_class <-
+    predict(tree_model, newdata = train_data, type = "class")
+  test_pred_class <-
+    predict(tree_model, newdata = test_data, type = "class")
   
   return (
     list(
       model = tree_model,
       model_name = 'Decision Tree',
       train_pred = train_pred,
-      test_pred = test_pred
+      test_pred = test_pred,
+      train_pred_class = train_pred_class,
+      test_pred_class = test_pred_class
     )
   )
 }
@@ -504,7 +507,7 @@ clustering_OHE <- function(data) {
     dummyVars(paste("~", paste(cat_col, collapse = "+")), data = data) %>%
     predict(newdata = data)
   return_data <-
-    cbind(encoded_data, data[, -which(names(data) %in% cat_col)])
+    cbind(encoded_data, data[,-which(names(data) %in% cat_col)])
   return(return_data)
 }
 
@@ -529,7 +532,7 @@ merge_raw_data <- function(raw_data_1, raw_data_2) {
   }
   diff_columns <- setdiff(names(wide_data), names(slim_data))
   wide_data <-
-    wide_data[, -which(names(wide_data) %in% diff_columns)]
+    wide_data[,-which(names(wide_data) %in% diff_columns)]
   return (union(slim_data, wide_data))
 }
 
@@ -544,7 +547,7 @@ read_data <- function(mode = 'silm') {
   }
 }
 
-# plot
+# plot function
 plotAUC <- function(data, target, feature) {
   data %>%
     ggplot(aes(x = data[[feature]], color = as.factor(target))) +
@@ -552,37 +555,70 @@ plotAUC <- function(data, target, feature) {
     xlab(feature)
 }
 
-plot_roc <- function(predcol1,
-                     outcol1,
-                     predcol2,
-                     outcol2,
-                     title) {
-  roc_1 <- rocit(score = predcol1, class = outcol1 == 'Offensive')
-  roc_2 <- rocit(score = predcol2, class = outcol2 == 'Offensive')
+# plot_roc <- function(train_data,
+#                      test_data,
+#                      predcol1,
+#                      predcol2,
+#                      title) {
+#   roc_1 <-
+#     rocit(score = predcol1,
+#           class = train_data[[target]] == 'Offensive')
+#   roc_2 <-
+#     rocit(score = predcol2,
+#           class = test_data[[target]] == 'Offensive')
+#   
+#   plot(
+#     roc_1,
+#     col = c("lightblue", "forestgreen"),
+#     lwd = 3,
+#     legend = FALSE,
+#     YIndex = FALSE,
+#     values = TRUE,
+#     asp = 1
+#   )
+#   lines(
+#     roc_2$TPR ~ roc_2$FPR,
+#     lwd = 3,
+#     col = c("salmon", "forestgreen"),
+#     asp = 1
+#   )
+#   legend(
+#     "bottomright",
+#     col = c("lightblue", "salmon", "forestgreen"),
+#     c("Test Data", "Training Data", "Null Model"),
+#     lwd = 2
+#   )
+#   title(title)
+# }
+
+
+plot_roc_class <-
+  function(train_data,
+           test_data,
+           predcols,
+           colors,
+           title) {
+    par(new = FALSE)
+    
+    for (i in 1:length(predcols)) {
+      ROCit_obj <-
+        rocit(score = predcols[[i]], train_data[[target]] == 'Offensive')
+      lines(ROCit_obj$TPR ~ ROCit_obj$FPR,
+            col = colors[i],
+            lwd = 3)
+    }
   
-  plot(
-    roc_1,
-    col = c("lightblue", "forestgreen"),
-    lwd = 3,
-    legend = FALSE,
-    YIndex = FALSE,
-    values = TRUE,
-    asp = 1
-  )
-  lines(
-    roc_2$TPR ~ roc_2$FPR,
-    lwd = 3,
-    col = c("salmon", "forestgreen"),
-    asp = 1
-  )
   legend(
     "bottomright",
-    col = c("lightblue", "salmon", "forestgreen"),
-    c("Test Data", "Training Data", "Null Model"),
-    lwd = 2
+    legend = features,
+    col = colors,
+    lty = 1
   )
   title(title)
 }
+
+
+
 
 # ui
 ui <-
@@ -663,7 +699,7 @@ ui <-
             ),
             
           ),
-          mainPanel(width = 9, plotOutput("classfication"))
+          mainPanel(width = 9, plotOutput("classification"))
         )
       )
     ),
@@ -685,21 +721,23 @@ ui <-
         
         div(class = "title", "Clustering"),
         
-        sidebarLayout(sidebarPanel(
-          width = 2,
-          selectInput(
-            "groups",
-            "Clustering Groups",
-            choices = list(
-              "3" = 3,
-              "4" = 4,
-              "5" = 5,
-              "6" = 6
+        sidebarLayout(
+          sidebarPanel(
+            width = 2,
+            selectInput(
+              "groups",
+              "Clustering Groups",
+              choices = list(
+                "3" = 3,
+                "4" = 4,
+                "5" = 5,
+                "6" = 6
+              ),
+              selected = 4,
             ),
-            selected = 4,
           ),
-        ),
-        mainPanel(width = 8, plotOutput("clustering")))
+          mainPanel(width = 8, plotOutput("clustering"))
+        )
       )
     )
   )
@@ -735,26 +773,93 @@ server <- function(input, output) {
   })
   
   # classification performance
-  output$classification <- renderPlot({
-    
-  })
+  # decision tree models
+  train_tree_data_cb1 <-
+    class_train_data[, c(target, combined_features)]
+  test_tree_data_cb1 <- class_test_data[, c(target, combined_features)]
+  train_tree_data_cb2 <- class_train_data[, c(target, rfe_features)]
+  test_tree_data_cb2 <- class_test_data[, c(target, rfe_features)]
+  #tree model 1
+  tmodel1_list <-
+    tree_model(train_tree_data_cb1, test_tree_data_cb1, combined_features)
+  pred_train_tmodel1 <- tmodel1_list$train_pred
+  pred_test_tmodel1 <- tmodel1_list$test_pred
+  #tree model 2
+  tmodel2_list <-
+    tree_model(train_tree_data_cb2, test_tree_data_cb2, rfe_features)
+  pred_train_tmodel2 <- tmodel2_list$train_pred
+  pred_test_tmodel2 <- tmodel2_list$test_pred
+  
+
+  allmodel_sets <- list(
+    list(
+      train_data = train_tree_data_cb1,
+      test_data = test_tree_data_cb1,
+      predcols = c(pred_train_tmodel1[, 2], pred_test_tmodel1[, 2]),
+      predcol_names = list("Prediction Set 1"),
+      title = "ROC for tmodel1 (features by Concatenation)"
+    ),
+    list(
+      train_data = train_tree_data_cb2,
+      test_data = test_tree_data_cb2,
+      predcols = c(pred_train_tmodel2[, 2], pred_test_tmodel2[, 2]),
+      predcol_names = list("Prediction Set 2"),
+      title = "ROC for tmodel2 (features by Concatenation)"
+    )
+  )
+  
+  # plot_roc(
+  #   train_tree_data_cb1,
+  #   test_tree_data_cb1,
+  #   pred_train_tmodel1[, 2],
+  #   pred_test_tmodel1[, 2],
+  #   title = "ROC for tmodel1 (features by Concatenation)"
+  # )
+  #xbgboost models
+  # train_xgb_data_cb1<-class_train_data[,c(target,combined_features)]
+  # test_xgb_data_cb1<-class_test_data[,c(target,combined_features)]
+  # train_xgb_data_cb2<-class_train_data[,c(target,rfe_features)]
+  # test_xgb_data_cb2<-class_test_data[,c(target,rfe_features)]
+  #plot_roc_curve(train_xgb_data_cb1, test_xgb_data_cb1, combined_features)
+  output$classification <-
+    renderPlot({
+      par(new = TRUE)  # 允许叠加绘图
+      colors <- c("blue", "red")  # 指定不同颜色
+      for (i in 1:length(allmodel_sets)) {
+        set <- allmodel_sets[[i]]
+        plot_roc_class(
+          train_data = set$train_data,
+          test_data = set$test_data,
+          predcols = set$predcols,
+          colors = colors,  # 使用指定的颜色
+          title = set$title
+        )
+      }
+    })
   
   # clustering
   output$clustering <- renderPlot({
     groups <- input$groups
-    kmClusters <- kmeans(cluster_scale_data, centers = groups, iter.max=100, trace = T)
+    kmClusters <-
+      kmeans(
+        cluster_scale_data,
+        centers = groups,
+        iter.max = 100,
+        trace = T
+      )
     kmCritframe <- data.frame(k = 1:10,
                               ch = kmClustering.ch$crit,
                               asw = kmClustering.asw$crit)
     fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-      geom_point() + geom_line(colour = "red") +
+      geom_point() + geom_line(colour = "salmon") +
       scale_x_continuous(breaks = 1:10, labels = 1:10) +
       labs(y = "CH index") + theme(text = element_text(size = 20))
     fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-      geom_point() + geom_line(colour = "blue") +
+      geom_point() + geom_line(colour = "dodgerblue") +
       scale_x_continuous(breaks = 1:10, labels = 1:10) +
       labs(y = "ASW") + theme(text = element_text(size = 20))
-    fig3 <- fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
+    fig3 <-
+      fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
     grid.arrange(fig1, fig2, fig3, ncol = 2)
   })
   
