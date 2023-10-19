@@ -18,9 +18,9 @@ neg.label <- 'Defensive'
 
 catVars <-
   c(
+    "penalties_order",
     "direct_freekicks_order",
-    "corners_and_indirect_freekicks_order",
-    "penalties_order"
+    "corners_and_indirect_freekicks_order"
   )
 numericVars <-
   c(
@@ -44,7 +44,13 @@ numericVars <-
   )
 
 selected_catVars <- catVars
-selected_numericVars <- numericVars
+selected_numericVars <-
+  c(
+    "starts_per_90",
+    "expected_goal_involvements_per_90",
+    "expected_goals_per_90",
+    "expected_assists_per_90"
+  )
 
 combined_features <-
   c(
@@ -224,29 +230,25 @@ class_mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
+  return(pred)
 }
 
 class_cat_pred <- function(catVars, train_data, test_data) {
   for (v in catVars) {
     pi <- paste('pred_', v, sep = '')
     train_data[, pi] <-
-      class_mkPredC(train_data[, 'player_type'], train_data[, v], train_data[, v])
+      class_mkPredC(train_data[, "player_type"], train_data[, v], train_data[, v])
     test_data[, pi] <-
-      class_mkPredC(test_data[, 'player_type'], test_data[, v], test_data[, v])
+      class_mkPredC(train_data[, "player_type"], train_data[, v], test_data[, v])
   }
   return (list(train = train_data, test = test_data))
 }
 
 class_mkPredN <- function(outCol, varCol, appCol) {
-  pPos <- sum(outCol == pos) / length(outCol)
-  naTab <- table(as.factor(outCol[is.na(varCol)]))
-  pPosWna <- (naTab / sum(naTab))[pos]
-  vTab <- table(as.factor(outCol), varCol)
-  pPosWv <-
-    (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
-  pred <- pPosWv[appCol]
-  pred[is.na(appCol)] <- pPosWna
-  pred[is.na(pred)] <- pPos
+  cuts <- unique(quantile(varCol, probs = seq(0, 1, 0.1), na.rm = T))
+  varC <- cut(varCol, cuts)
+  appC <- cut(appCol, cuts)
+  class_mkPredC(outCol, varC, appC)
 }
 
 class_num_pred <- function(numVars, train_data, test_data) {
@@ -255,7 +257,7 @@ class_num_pred <- function(numVars, train_data, test_data) {
     train_data[, pi] <-
       class_mkPredN(train_data[, 'player_type'], train_data[, v], train_data[, v])
     test_data[, pi] <-
-      class_mkPredN(test_data[, 'player_type'], test_data[, v], test_data[, v])
+      class_mkPredN(train_data[, 'player_type'], train_data[, v], test_data[, v])
   }
   return (list(train = train_data, test = test_data))
 }
@@ -547,12 +549,22 @@ read_data <- function(mode = 'silm') {
   }
 }
 
-# plot function
-plotAUC <- function(data, target, feature) {
-  data %>%
-    ggplot(aes(x = data[[feature]], color = as.factor(target))) +
+# plot
+plot_auc_density <- function(data, features) {
+  count = length(features)
+  p1 <- data[, features] %>%
+    filter(player_type == pos.label) %>% 
+    pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
+    ggplot(aes(x = Value, color = Type)) +
     geom_density() +
-    xlab(feature)
+    xlab(pos.label)
+  p2 <-  data[, features] %>%
+    filter(player_type == neg.label) %>% 
+    pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
+    ggplot(aes(x = Value, color = Type)) +
+    geom_density() +
+    xlab(neg.label)
+  grid.arrange(p1, p2, ncol = 1)
 }
 
 # plot_roc <- function(train_data,
@@ -617,6 +629,37 @@ plot_roc_class <-
   title(title)
 }
 
+plot_roc_sa <-
+  function(data,
+           features,
+           title) {
+    colors = c("salmon",
+               "lightblue",
+               "navyblue",
+               "seagreen",
+               "orchid",
+               "lightpink")
+    for (i in 1:length(features)) {
+      par(new = T)
+      feature = features[i]
+      pred_feature = paste0("pred_", feature)
+      ROCit_obj <-
+        rocit(score = data[[pred_feature]], class = data[, target] == pos.label)
+      plot(
+        ROCit_obj,
+        col = c(colors[i], 1),
+        legend = FALSE,
+        YIndex = FALSE,
+        values = FALSE
+      )
+      title(title)
+    }
+    legend("bottomright",
+           legend = features,
+           col = colors,
+           lty = 1)
+  }
+
 
 
 
@@ -644,6 +687,14 @@ ui <-
         sidebarLayout(
           sidebarPanel(
             width = 3,
+            
+            selectInput(
+              "graph",
+              "Graph Type",
+              choices = list('Double Density' = 'desity', 'ROC Curve' = 'roc'),
+              selected = 'desity'
+            ),
+            
             checkboxGroupInput(
               "categorical",
               "Categorical Variables",
@@ -659,7 +710,11 @@ ui <-
             ),
             
           ),
-          mainPanel(width = 9, plotOutput("single"))
+          
+          mainPanel(fluidRow(
+            column(6, plotOutput("single_left")),
+            column(6, plotOutput("single_right"))
+          ))
         )
       )
     ),
@@ -758,18 +813,59 @@ server <- function(input, output) {
   # remove raw data
   rm(fpl_raw_data)
   
-  # single variable
-  selected_catVars <- catVars
-  cat_return_list <-
-    class_cat_pred(selected_catVars, class_train_data, class_test_data)
-  single_train_data <- cat_return_list$train
-  single_test_data <- cat_return_list$test
+  output$single_left <- renderPlot({
+    # category single variable
+    selected_cat_input <- input$categorical
+    selected_catVars <- c()
+    for (i in 1:length(selected_cat_input)) {
+      value = selected_cat_input[[i]]
+      selected_catVars <- c(selected_catVars, value)
+    }
+    if (length(selected_catVars) == 0) {
+      return (NULL)
+    }
+    cat_return_list <-
+      class_cat_pred(selected_catVars, class_train_data, class_test_data)
+    single_cat_test_data <- cat_return_list$test
+    # plot
+    graph <- input$graph
+    if (graph == 'desity') {
+      plot_auc_density(single_cat_test_data,
+                       c(target, selected_catVars))
+    } else if (graph == 'roc') {
+      # categorical
+      plot_roc_sa(single_cat_test_data,
+                  selected_catVars,
+                  "ROC for Categorical Single Variable")
+    }
+  })
   
-  output$single <- renderPlot({
-    density_plot <- single_test_data %>%
-      ggplot(aes(x = pred_direct_freekicks_order, color = as.factor(player_type))) +
-      geom_density() +
-      xlab("pred_direct_freekicks_order")
+  output$single_right <- renderPlot({
+    # numerical single variable
+    selected_num_input <- input$numerical
+    selected_numericVars <- c()
+    for (i in 1:length(selected_num_input)) {
+      value = selected_num_input[[i]]
+      selected_numericVars <- c(selected_numericVars, value)
+    }
+    if (length(selected_numericVars) == 0) {
+      return (NULL)
+    }
+    num_return_list <-
+      class_num_pred(selected_numericVars, class_train_data, class_test_data)
+    single_num_test_data <- num_return_list$test
+    # plot
+    graph <- input$graph
+    if (graph == 'desity') {
+      plot_auc_density(single_num_test_data,
+                       c(target, selected_numericVars))
+    } else if (graph == 'roc') {
+      plot_roc_sa(
+        single_num_test_data,
+        selected_numericVars,
+        "ROC for Numerical Single Variable"
+      )
+    }
   })
   
   # classification performance
