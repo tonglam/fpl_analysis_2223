@@ -1,3 +1,5 @@
+library(shiny)
+library(async)
 library(tidyverse)
 library(rpart)
 library(gridExtra)
@@ -600,12 +602,14 @@ plot_roc_class <-
         values = FALSE
       )
     }
+
     legend("bottomright",
            legend = model_names,
            col = colors,
            lty = 1)
     title(title)
     
+
   }
 
 plot_roc_sa <-
@@ -639,9 +643,6 @@ plot_roc_sa <-
            lty = 1,ncol=2)
   }
 
-
-
-
 # ui
 ui <-
   navbarPage(
@@ -668,7 +669,7 @@ ui <-
             width = 3,
             
             selectInput(
-              "graph",
+              "single_graph",
               "Graph Type",
               choices = list('Double Density' = 'desity', 'ROC Curve' = 'roc'),
               selected = 'desity'
@@ -758,6 +759,7 @@ ui <-
         sidebarLayout(
           sidebarPanel(
             width = 2,
+            
             selectInput(
               "groups",
               "Clustering Groups",
@@ -769,6 +771,15 @@ ui <-
               ),
               selected = 4,
             ),
+            
+            selectInput(
+              "cluster_graph",
+              "Clustering Groups",
+              choices = list("Cluster Plot" = 'cluster',
+                             "ASW Plot" = "asw"),
+              selected = 4,
+            ),
+            
           ),
           mainPanel(width = 8, plotOutput("clustering"))
         )
@@ -807,7 +818,7 @@ server <- function(input, output) {
       class_cat_pred(selected_catVars, class_train_data, class_test_data)
     single_cat_test_data <- cat_return_list$test
     # plot
-    graph <- input$graph
+    graph <- input$single_graph
     if (graph == 'desity') {
       plot_auc_density(single_cat_test_data,
                        c(target, selected_catVars))
@@ -836,7 +847,7 @@ server <- function(input, output) {
       class_num_pred(selected_numericVars, class_train_data, class_test_data)
     single_num_test_data <- num_return_list$test
     # plot
-    graph <- input$graph
+    graph <- input$single_graph
     if (graph == 'desity') {
       plot_auc_density(single_num_test_data,
                        c(target, selected_numericVars))
@@ -867,6 +878,7 @@ server <- function(input, output) {
     tree_model(train_tree_data_cb2, test_tree_data_cb2, rfe_features)
   pred_train_tmodel2 <- tmodel2_list$train_pred
   pred_test_tmodel2 <- tmodel2_list$test_pred
+
 
   #build xbgboost models - filter out the features
   train_xgb_data_cb1<-class_train_data[,c(target,combined_features)]
@@ -948,31 +960,52 @@ server <- function(input, output) {
     }
   })
 
+
   
   # clustering
-  output$clustering <- renderPlot({
-    groups <- input$groups
-    kmClusters <-
-      kmeans(
-        cluster_scale_data,
-        centers = groups,
-        iter.max = 100,
-        trace = T
-      )
+  async({
+    kmClustering.ch <-
+      kmeansruns(cluster_scale_data,
+                 krange = 1:10,
+                 criterion = "ch")
+    kmClustering.asw <-
+      kmeansruns(cluster_scale_data,
+                 krange = 1:10,
+                 criterion = "asw")
     kmCritframe <- data.frame(k = 1:10,
                               ch = kmClustering.ch$crit,
                               asw = kmClustering.asw$crit)
-    fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-      geom_point() + geom_line(colour = "salmon") +
-      scale_x_continuous(breaks = 1:10, labels = 1:10) +
-      labs(y = "CH index") + theme(text = element_text(size = 20))
-    fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-      geom_point() + geom_line(colour = "dodgerblue") +
-      scale_x_continuous(breaks = 1:10, labels = 1:10) +
-      labs(y = "ASW") + theme(text = element_text(size = 20))
-    fig3 <-
-      fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
-    grid.arrange(fig1, fig2, fig3, ncol = 2)
+    
+    output$clustering <- renderPlot({
+      groups <- input$groups
+      graph <- input$cluster_graph
+      
+      kmClusters <-
+        kmeans(
+          cluster_scale_data,
+          centers = groups,
+          iter.max = 100,
+          trace = T
+        )
+      
+      if (graph == 'cluster') {
+        clusters <- kmClusters$cluster
+        fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
+      } else if (graph == 'asw') {
+        fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
+          geom_point() + geom_line(colour = "salmon") +
+          scale_x_continuous(breaks = 1:10, labels = 1:10) +
+          labs(y = "CH index") + theme(text = element_text(size = 20))
+        fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
+          geom_point() + geom_line(colour = "dodgerblue") +
+          scale_x_continuous(breaks = 1:10, labels = 1:10) +
+          labs(y = "ASW") + theme(text = element_text(size = 20))
+        fig3 <-
+          fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
+        grid.arrange(fig1, fig2, fig3, ncol = 2)
+      }
+    })
+    
   })
   
 }
