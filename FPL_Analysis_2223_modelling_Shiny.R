@@ -1,3 +1,5 @@
+library(shiny)
+library(async)
 library(tidyverse)
 library(rpart)
 library(gridExtra)
@@ -205,8 +207,8 @@ class_transform <- function(data) {
 class_spilt <- function(data, ratio = spilt_ratio) {
   set.seed(500)
   fortrain <- runif(nrow(data)) < ratio
-  train_data <- data[fortrain, ]
-  test_data <- data[!fortrain, ]
+  train_data <- data[fortrain,]
+  test_data <- data[!fortrain,]
   outCol <- names(train_data)[-c(1, 2)]
   vars <- setdiff(outCol, c('player_type', "player_type_value"))
   return(list(train = train_data, test = test_data))
@@ -226,7 +228,7 @@ class_mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   naTab <- table(as.factor(outCol[is.na(varCol)]))
   pPosWna <- (naTab / sum(naTab))[pos]
   vTab <- table(as.factor(outCol), varCol)
-  pPosWv <- (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+  pPosWv <- (vTab[pos, ] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
@@ -268,7 +270,7 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 }
 
 class_single_performance <- function(train_data, test_data, vars) {
-  result <- tribble( ~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
+  result <- tribble(~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
   categorical_vars <-
     vars[sapply(train_data[, vars], class) %in% c('factor', 'character')]
   numerical_vars <-
@@ -509,7 +511,7 @@ clustering_OHE <- function(data) {
     dummyVars(paste("~", paste(cat_col, collapse = "+")), data = data) %>%
     predict(newdata = data)
   return_data <-
-    cbind(encoded_data, data[,-which(names(data) %in% cat_col)])
+    cbind(encoded_data, data[, -which(names(data) %in% cat_col)])
   return(return_data)
 }
 
@@ -534,7 +536,7 @@ merge_raw_data <- function(raw_data_1, raw_data_2) {
   }
   diff_columns <- setdiff(names(wide_data), names(slim_data))
   wide_data <-
-    wide_data[,-which(names(wide_data) %in% diff_columns)]
+    wide_data[, -which(names(wide_data) %in% diff_columns)]
   return (union(slim_data, wide_data))
 }
 
@@ -553,56 +555,19 @@ read_data <- function(mode = 'silm') {
 plot_auc_density <- function(data, features) {
   count = length(features)
   p1 <- data[, features] %>%
-    filter(player_type == pos.label) %>% 
+    filter(player_type == pos.label) %>%
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
     xlab(pos.label)
   p2 <-  data[, features] %>%
-    filter(player_type == neg.label) %>% 
+    filter(player_type == neg.label) %>%
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
     xlab(neg.label)
   grid.arrange(p1, p2, ncol = 1)
 }
-
-# plot_roc <- function(train_data,
-#                      test_data,
-#                      predcol1,
-#                      predcol2,
-#                      title) {
-#   roc_1 <-
-#     rocit(score = predcol1,
-#           class = train_data[[target]] == 'Offensive')
-#   roc_2 <-
-#     rocit(score = predcol2,
-#           class = test_data[[target]] == 'Offensive')
-#   
-#   plot(
-#     roc_1,
-#     col = c("lightblue", "forestgreen"),
-#     lwd = 3,
-#     legend = FALSE,
-#     YIndex = FALSE,
-#     values = TRUE,
-#     asp = 1
-#   )
-#   lines(
-#     roc_2$TPR ~ roc_2$FPR,
-#     lwd = 3,
-#     col = c("salmon", "forestgreen"),
-#     asp = 1
-#   )
-#   legend(
-#     "bottomright",
-#     col = c("lightblue", "salmon", "forestgreen"),
-#     c("Test Data", "Training Data", "Null Model"),
-#     lwd = 2
-#   )
-#   title(title)
-# }
-
 
 plot_roc_class <-
   function(train_data,
@@ -619,15 +584,13 @@ plot_roc_class <-
             col = colors[i],
             lwd = 3)
     }
-  
-  legend(
-    "bottomright",
-    legend = features,
-    col = colors,
-    lty = 1
-  )
-  title(title)
-}
+    
+    legend("bottomright",
+           legend = features,
+           col = colors,
+           lty = 1)
+    title(title)
+  }
 
 plot_roc_sa <-
   function(data,
@@ -660,9 +623,6 @@ plot_roc_sa <-
            lty = 1)
   }
 
-
-
-
 # ui
 ui <-
   navbarPage(
@@ -689,7 +649,7 @@ ui <-
             width = 3,
             
             selectInput(
-              "graph",
+              "single_graph",
               "Graph Type",
               choices = list('Double Density' = 'desity', 'ROC Curve' = 'roc'),
               selected = 'desity'
@@ -779,6 +739,7 @@ ui <-
         sidebarLayout(
           sidebarPanel(
             width = 2,
+            
             selectInput(
               "groups",
               "Clustering Groups",
@@ -790,6 +751,15 @@ ui <-
               ),
               selected = 4,
             ),
+            
+            selectInput(
+              "cluster_graph",
+              "Clustering Groups",
+              choices = list("Cluster Plot" = 'cluster',
+                             "ASW Plot" = "asw"),
+              selected = 4,
+            ),
+            
           ),
           mainPanel(width = 8, plotOutput("clustering"))
         )
@@ -828,7 +798,7 @@ server <- function(input, output) {
       class_cat_pred(selected_catVars, class_train_data, class_test_data)
     single_cat_test_data <- cat_return_list$test
     # plot
-    graph <- input$graph
+    graph <- input$single_graph
     if (graph == 'desity') {
       plot_auc_density(single_cat_test_data,
                        c(target, selected_catVars))
@@ -855,7 +825,7 @@ server <- function(input, output) {
       class_num_pred(selected_numericVars, class_train_data, class_test_data)
     single_num_test_data <- num_return_list$test
     # plot
-    graph <- input$graph
+    graph <- input$single_graph
     if (graph == 'desity') {
       plot_auc_density(single_num_test_data,
                        c(target, selected_numericVars))
@@ -872,7 +842,8 @@ server <- function(input, output) {
   # decision tree models
   train_tree_data_cb1 <-
     class_train_data[, c(target, combined_features)]
-  test_tree_data_cb1 <- class_test_data[, c(target, combined_features)]
+  test_tree_data_cb1 <-
+    class_test_data[, c(target, combined_features)]
   train_tree_data_cb2 <- class_train_data[, c(target, rfe_features)]
   test_tree_data_cb2 <- class_test_data[, c(target, rfe_features)]
   #tree model 1
@@ -886,7 +857,7 @@ server <- function(input, output) {
   pred_train_tmodel2 <- tmodel2_list$train_pred
   pred_test_tmodel2 <- tmodel2_list$test_pred
   
-
+  
   allmodel_sets <- list(
     list(
       train_data = train_tree_data_cb1,
@@ -902,59 +873,67 @@ server <- function(input, output) {
     )
   )
   
-  # plot_roc(
-  #   train_tree_data_cb1,
-  #   test_tree_data_cb1,
-  #   pred_train_tmodel1[, 2],
-  #   pred_test_tmodel1[, 2],
-  #   title = "ROC for tmodel1 (features by Concatenation)"
-  # )
-  #xbgboost models
-  # train_xgb_data_cb1<-class_train_data[,c(target,combined_features)]
-  # test_xgb_data_cb1<-class_test_data[,c(target,combined_features)]
-  # train_xgb_data_cb2<-class_train_data[,c(target,rfe_features)]
-  # test_xgb_data_cb2<-class_test_data[,c(target,rfe_features)]
-  #plot_roc_curve(train_xgb_data_cb1, test_xgb_data_cb1, combined_features)
   output$classification <-
     renderPlot({
-    par(new = TRUE)  # 允许叠加绘图
-    colors <- c("blue", "red")  # 指定不同颜色
-    for (i in 1:length(allmodel_sets)) {
-      set <- allmodel_sets[[i]]
-      plot_roc_class(
-        train_data = set$train_data,
-        test_data = set$test_data,
-        predcols = set$predcols,
-        colors = colors,  # 使用指定的颜色
-        title = set$title
-      )
-    }
-  })
+      par(new = TRUE)  # 允许叠加绘图
+      colors <- c("blue", "red")  # 指定不同颜色
+      for (i in 1:length(allmodel_sets)) {
+        set <- allmodel_sets[[i]]
+        plot_roc_class(
+          train_data = set$train_data,
+          test_data = set$test_data,
+          predcols = set$predcols,
+          colors = colors,
+          # 使用指定的颜色
+          title = set$title
+        )
+      }
+    })
   
   # clustering
-  output$clustering <- renderPlot({
-    groups <- input$groups
-    kmClusters <-
-      kmeans(
-        cluster_scale_data,
-        centers = groups,
-        iter.max = 100,
-        trace = T
-      )
+  async({
+    kmClustering.ch <-
+      kmeansruns(cluster_scale_data,
+                 krange = 1:10,
+                 criterion = "ch")
+    kmClustering.asw <-
+      kmeansruns(cluster_scale_data,
+                 krange = 1:10,
+                 criterion = "asw")
     kmCritframe <- data.frame(k = 1:10,
                               ch = kmClustering.ch$crit,
                               asw = kmClustering.asw$crit)
-    fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-      geom_point() + geom_line(colour = "salmon") +
-      scale_x_continuous(breaks = 1:10, labels = 1:10) +
-      labs(y = "CH index") + theme(text = element_text(size = 20))
-    fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-      geom_point() + geom_line(colour = "dodgerblue") +
-      scale_x_continuous(breaks = 1:10, labels = 1:10) +
-      labs(y = "ASW") + theme(text = element_text(size = 20))
-    fig3 <-
-      fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
-    grid.arrange(fig1, fig2, fig3, ncol = 2)
+    
+    output$clustering <- renderPlot({
+      groups <- input$groups
+      graph <- input$cluster_graph
+      
+      kmClusters <-
+        kmeans(
+          cluster_scale_data,
+          centers = groups,
+          iter.max = 100,
+          trace = T
+        )
+      
+      if (graph == 'cluster') {
+        clusters <- kmClusters$cluster
+        fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
+      } else if (graph == 'asw') {
+        fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
+          geom_point() + geom_line(colour = "salmon") +
+          scale_x_continuous(breaks = 1:10, labels = 1:10) +
+          labs(y = "CH index") + theme(text = element_text(size = 20))
+        fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
+          geom_point() + geom_line(colour = "dodgerblue") +
+          scale_x_continuous(breaks = 1:10, labels = 1:10) +
+          labs(y = "ASW") + theme(text = element_text(size = 20))
+        fig3 <-
+          fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
+        grid.arrange(fig1, fig2, fig3, ncol = 2)
+      }
+    })
+    
   })
   
 }
