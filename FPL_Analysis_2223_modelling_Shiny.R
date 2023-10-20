@@ -7,6 +7,7 @@ library(ROCR)
 library(ROCit)
 library(caret)
 library(factoextra)
+library(xgboost)
 
 # constants
 data_scale <- "small"
@@ -396,8 +397,7 @@ xgb_model <- function(train_data, test_data, selected_features) {
     select(all_of(c(target, selected_features))) %>%
     mutate(
       type = as.numeric(player_type == 'Offensive'),
-      .after = player_type,
-      penalties_order = ifelse(penalties_order == 'Taker', 1, 0)
+      .after = player_type
     )
   
   if ("penalties_order" %in% selected_features) {
@@ -419,7 +419,7 @@ xgb_model <- function(train_data, test_data, selected_features) {
     verbose = 0
   )
   
-  train_pred_ <- predict(xgb_model, input)
+  train_pred <- predict(xgb_model, input)
   train_pred_class <- ifelse(train_pred > 0.5, pos.label, neg.label)
   test_pred <- predict(xgb_model, test_input)
   test_pred_class <- ifelse(test_pred > 0.5, pos.label, neg.label)
@@ -559,37 +559,57 @@ plot_auc_density <- function(data, features) {
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
-    xlab(pos.label)
+    xlab(pos.label) 
   p2 <-  data[, features] %>%
     filter(player_type == neg.label) %>%
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
     xlab(neg.label)
-  grid.arrange(p1, p2, ncol = 1)
+  
+  grid.arrange(p11, p21, ncol = 1)
 }
 
+
 plot_roc_class <-
-  function(train_data,
-           test_data,
-           predcols,
-           colors,
-           title) {
-    par(new = FALSE)
+  function(model_names,
+           data_list,
+           predcol_list,title='') {
+    colors <- c(
+      "salmon",
+      "lightblue",
+      "navyblue",
+      "seagreen",
+      "orchid",
+      "lightpink",
+      "yellow",
+      "grey"
+    )
     
-    for (i in 1:length(predcols)) {
+
+    
+    for (i in 1:length(data_list)) {
+      par(new = TRUE)
+      data <- data_list[[i]]
+      predcols <- predcol_list[[i]]
       ROCit_obj <-
-        rocit(score = predcols[[i]], test_data[, target] == 'Offensive')
-      lines(ROCit_obj$TPR ~ ROCit_obj$FPR,
-            col = colors[i],
-            lwd = 3)
+        rocit(score = predcols, data[[target]] == pos.label)
+      plot(
+        ROCit_obj,
+        col = c(colors[i], 1),
+        legend = FALSE,
+        YIndex = FALSE,
+        values = FALSE
+      )
     }
-    
+
     legend("bottomright",
-           legend = features,
+           legend = model_names,
            col = colors,
            lty = 1)
     title(title)
+    
+
   }
 
 plot_roc_sa <-
@@ -620,7 +640,7 @@ plot_roc_sa <-
     legend("bottomright",
            legend = features,
            col = colors,
-           lty = 1)
+           lty = 1,ncol=2)
   }
 
 # ui
@@ -693,7 +713,7 @@ ui <-
            }"
           )
         )),
-        div(class = "title", "Classification"),
+        div(class = "title", "ROC by comparing different models"),
         
         sidebarLayout(
           sidebarPanel(
@@ -821,6 +841,8 @@ server <- function(input, output) {
     if (length(selected_numericVars) == 0) {
       return (NULL)
     }
+
+    
     num_return_list <-
       class_num_pred(selected_numericVars, class_train_data, class_test_data)
     single_num_test_data <- num_return_list$test
@@ -839,7 +861,7 @@ server <- function(input, output) {
   })
   
   # classification performance
-  # decision tree models
+  # build decision tree models - filter out the features
   train_tree_data_cb1 <-
     class_train_data[, c(target, combined_features)]
   test_tree_data_cb1 <-
@@ -856,39 +878,89 @@ server <- function(input, output) {
     tree_model(train_tree_data_cb2, test_tree_data_cb2, rfe_features)
   pred_train_tmodel2 <- tmodel2_list$train_pred
   pred_test_tmodel2 <- tmodel2_list$test_pred
-  
-  
-  allmodel_sets <- list(
-    list(
-      train_data = train_tree_data_cb1,
-      test_data = test_tree_data_cb1,
-      predcols = c(pred_train_tmodel1[, 2], pred_test_tmodel1[, 2]),
-      title = "ROC for tmodel1 (features by Concatenation)"
-    ),
-    list(
-      train_data = train_tree_data_cb2,
-      test_data = test_tree_data_cb2,
-      predcols = c(pred_train_tmodel2[, 2], pred_test_tmodel2[, 2]),
-      title = "ROC for tmodel2 (features by Concatenation)"
-    )
-  )
-  
-  output$classification <-
-    renderPlot({
-      par(new = TRUE)  # 允许叠加绘图
-      colors <- c("blue", "red")  # 指定不同颜色
-      for (i in 1:length(allmodel_sets)) {
-        set <- allmodel_sets[[i]]
-        plot_roc_class(
-          train_data = set$train_data,
-          test_data = set$test_data,
-          predcols = set$predcols,
-          colors = colors,
-          # 使用指定的颜色
-          title = set$title
-        )
+
+
+  #build xbgboost models - filter out the features
+  train_xgb_data_cb1<-class_train_data[,c(target,combined_features)]
+  test_xgb_data_cb1<-class_test_data[,c(target,combined_features)]
+  train_xgb_data_cb2<-class_train_data[,c(target,rfe_features)]
+  test_xgb_data_cb2<-class_test_data[,c(target,rfe_features)]
+  #xgb model 1
+  xgb1_list<-xgb_model(train_xgb_data_cb1,test_xgb_data_cb1,combined_features)
+  pred_train_xgb1<-xgb1_list$train_pred
+  pred_test_xgb1<-xgb1_list$test_pred
+  #xgb model 2
+  xgb2_list<-xgb_model(train_xgb_data_cb2,test_xgb_data_cb2,rfe_features)
+  pred_train_xgb2<-xgb2_list$train_pred
+  pred_test_xgb2<-xgb2_list$test_pred
+ 
+  #Plotting
+  output$classification <- renderPlot({
+    selected_models_input <- input$model
+    selected_features_input <- input$feature
+    #create a empty list to store the data
+    model_names <- c()
+    dataset_list <- list()
+    pred_list <- list()
+    #set the checkbox condition
+    if ("Decision Tree" %in% selected_models_input) {
+      #add data into the list
+      if ("Concatenation" %in% selected_features_input) {
+        model_names <- c(model_names, c("tmodel1-train",
+                                        "tmodel1-test"))
+        dataset_list <-
+          c(dataset_list,
+            list(train_tree_data_cb1),
+            list(test_tree_data_cb1))
+        pred_list <- c(pred_list,
+                       list(pred_train_tmodel1[, 2]),
+                       list(pred_test_tmodel1[, 2]))
       }
-    })
+      if ("Recursive Feature Elimination" %in% selected_features_input) {
+        model_names <- c(model_names, c("tmodel2-train",
+                                        "tmodel2-test"))
+        dataset_list <-
+          c(dataset_list,
+            list(train_tree_data_cb2),
+            list(test_tree_data_cb2))
+        pred_list <-
+          c(pred_list,
+            list(pred_train_tmodel2[, 2]),
+            list(pred_test_tmodel2[, 2]))
+      }
+      
+    }
+    
+    if ("XGBoost" %in% selected_models_input) {
+      if ("Concatenation" %in% selected_features_input) {
+        model_names <- c(model_names, c("xgb1-train",
+                                        "xgb1-test"))
+        dataset_list <- c(dataset_list,
+                          list(train_xgb_data_cb1),
+                          list(test_xgb_data_cb1))
+        pred_list <- c(pred_list, list(pred_train_xgb1),
+                       list(pred_test_xgb1))
+        }
+      if ("Recursive Feature Elimination" %in% selected_features_input) {
+          model_names <- c(model_names, c("xgb2-train",
+                                          "xgb2-test"))
+          dataset_list <-
+            c(dataset_list,
+              list(train_xgb_data_cb2),
+              list(test_xgb_data_cb2))
+          pred_list <- c(pred_list,
+                         list(pred_train_xgb2),
+                         list(pred_test_xgb2))
+        }
+      }
+    
+    #check the input condition
+    if (length(model_names) != 0) {
+      plot_roc_class(model_names, dataset_list, pred_list)
+    }
+  })
+
+
   
   # clustering
   async({
