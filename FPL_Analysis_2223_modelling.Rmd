@@ -14,7 +14,14 @@ knitr::opts_chunk$set(echo = TRUE)
 #knitr::opts_chunk$set(warning = FALSE)
 ```
 
+Task distribution：
+Tong LAN (24056082) (50%): all tasks
+Hanyu XUE (24070974) (50%): all tasks
+
 # Introduction
+The dataset used in this project is obtained from [*kaggle.com*](https://www.kaggle.com/), collected by *PAOLO MAZZA*. [[1]](https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2022-2023) 
+This dataset serves as a fundamental collection of statistics derived from the official Fantasy Premier League website [2](FPL), which allows users to construct virtual soccer teams comprising actual players and accumulate points according to their performance or perceived on-field contributions. Based on the exploration in  Project 1, we will further explore the dataset and try to modelling and visualising to predict the player's position this project. 
+
 
 ## Load libraries
 
@@ -36,9 +43,11 @@ library(factoextra)
 library(fpc)
 library(grDevices)
 ```
-# Data Preprocessing
+#Part 1 - Data Preprocessing
+According to the analysis in project 1, we found that the position is highly correlated with the performance variables, such as goals_scored, assists, clean_sheets, etc. Therefore, we decided to group the 4 position into 2 labels, offensive and defensive as our binary types. The offensive position includes forward and midfielder, and the defensive position includes defender and goalkeeper. Then, we will use the performance variables to predict the position.
 
 ## Initial Transform
+Before we start to explore the dataset, we need to do some initial transformations to make the dataset more readable and easier to use. First of all, we drop some columns that not meaningful for our analysis. Then, we deal with the missing values. Finally, we convert the label column.
 
 ```{r preprocess_init_transform}
 preprocess_init_transform <- function(data) {
@@ -82,6 +91,7 @@ preprocess_init_transform <- function(data) {
 ```
 
 ## Handle Missing Values
+3 columns have missing values by checking. We decided to convert these columns to logical values, True represents not missing and False represents missing. Then, we check the missing values again, and there are no missing values in the dataset.
 
 ```{r preprocess_init_handle_NAs}
 preprocess_init_handle_NAs <- function(data) {
@@ -110,9 +120,7 @@ preprocess_init_handle_NAs <- function(data) {
 
 ## Further Transform
 
-drop Position Column because it is highly correlated with the label column, like we just used it to create the label column.
-
-Then, we should covert the label column to numerical values, 1 present offensive, 0 present defensive.
+Before we convert the label column, we drop Position Columns. Because it is highly correlated with the label column, and we just used it to create the label column. Then we covert the label column to numerical values, 1 present offensive, 0 present defensive.
 
 ```{r preprocess_further_transform, results='hide'}
 preprocess_further_transform <- function(data) {
@@ -163,6 +171,7 @@ preprocess_further_transform <- function(data) {
 ```
 
 ### Features that were removed
+With the above transformation, we removed the some features.
 
 ### Features that were included
 
@@ -196,8 +205,7 @@ preprocess_further_handle_NAs <- function(data) {
 ```
 
 ## Add Target Value
-
-add a target column
+There are 4 position, we take "GKP" and "DEF" as a defensive player, and take "MID" and "FWD" as a offensive player. So "Offensive" and "Defensive" are our classes. Then we create a new column called "player_type_value" to represent the player type with numerical values, 1 represents offensive player, 0 represents defensive player.
 
 ```{r preprocess_target_value}
 preprocess_target_value <- function(data) {
@@ -215,8 +223,10 @@ preprocess_target_value <- function(data) {
 ```
 
 ### plot target value
+To easily see the quantity and distribution of the binary value, we plot a barplot and a donut plot to show it.
 
 ```{r preprocess_target_barplot}
+#define plot function - barplot
 preprocess_target_barplot <- function(data, target) {
   data %>%
     ggplot(aes(x = target, fill = target)) +
@@ -230,6 +240,7 @@ preprocess_target_barplot <- function(data, target) {
 ```
 
 ```{r preprocess_target_donut}
+#define plot function - donut plot
 preprocess_target_donut <- function(data) {
   data %>%
     mutate(player_type = ifelse(player_type == "Defensive", 0, 1)) %>%
@@ -268,6 +279,7 @@ preprocess_target_donut <- function(data) {
 
 
 ## Read Data
+Import the processed data and plot the binary value.
 
 ```{r read_data, message=FALSE}
 fpl_raw_data <- read.csv("./FPL_Dataset_2022-2023.csv")
@@ -292,7 +304,7 @@ rm(fpl_raw_data)
 
 # knitr::kable()
 ```
-
+From these 2 plots, we can see that the data is balanced, because the difference between the offensive players and defensive players are not that much. Next we do some sampling for the data.
 
 ## Split data into 2 sets
 
@@ -321,21 +333,16 @@ numericVars <-
   vars[sapply(train_data[, vars], class) %in% c('numeric', 'integer')]
 ```
 
-# Classification
+#Part 2 - Classification
 
 ## Binary Classification Problem
 
-offensive and defensive
-
-## Single Variable
-
-
+As mentioned before, offensive and defensive are our binary problem. We will use the following models to predict the target value.
 
 ## Single Variable Model Build
-
+With the previous split data set, we built a single-variable model to see the performance of each variable.
 ### Categorical
 - Build model 
-
 ```{r categorical_predictions}
 #define a predict function for categorical variables
 mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
@@ -400,6 +407,7 @@ for (v in catVars) {
 catResult <- arrange(catResult, desc(trainAUC), desc(testAUC))
 catResult
 ```
+As we can see from the result, the best AUC for training and testing data are 0.55 and 0.61 which is from "penalties_order" and good enough.
 
 - Plotting the density plot for predicted probabilities
 
@@ -410,6 +418,8 @@ catAUC2 <- plotAUC(test_data, test_data$player_type, "pred_corners_and_indirect_
 catAUC3 <- plotAUC(test_data, test_data$player_type, "pred_direct_freekicks_order")
 grid.arrange(catAUC1, catAUC2, catAUC3, ncol = 2)
 ```
+Through the density charts above, we can check the relationship between predicted probabilities and the variables. The higher the predicted probabilities, the more likely the player is offensive.
+
 - Plotting the ROC
 
 ```{r ROC categorical}
@@ -454,9 +464,8 @@ plot_roc_sa(
 )
 
 ``` 
+From the ROC, We also can see the 3 features perform almost the same. The highest one is "pred_penalties_order".
 
-- Conclusion:
-The result shows 3 of the features have similar score by AUC. "penalties_order" is the highest AUC score.
 
 ### Numerical
 - Build model 
@@ -504,6 +513,8 @@ for (v in numericVars) {
 numResult <- arrange(numResult, desc(trainAUC), desc(testAUC))
 numResult['pred']
 ```
+From this table, we can see the best AUC for training and testing data are 0.76 and 0.80 which is pretty good. And the following features still have good performance and each score is really close. Moreover, the auc of the top ten are all above 0.6.
+
 
 - Plotting the density plot for AUC values
 ```{r  density plot for AUC values (numerical)}
@@ -531,6 +542,8 @@ for (col in Ncol[1:6]) {
 
 grid.arrange(grobs = Nplotlist, ncol = 2)
 ```
+These features still show good results in the density diagram.
+
 - Plotting the ROC
 ```{r roc numerical}
 #plot the top 6 features
@@ -550,13 +563,15 @@ plot_roc_sa(
 )
 
 ```
+As we can see, most of the features are very close to the Y-axis and the X axis are relatively small. It means the top 6 features are performing very well. The highest one is "pred_expected_goal_involvements_per_90".
+
 - Conclusion:
-The result shows 6 of the features have similar score by AUC. "pred_expected_goal_involvements_per_90" is the highest AUC score.
+The results indicate that the numerical features perform exceptionally well, suggesting that the prediction accuracy is significantly high.
 
 ## Null Model and Single Variable Model Evaluation
 
 #### LogLikelihood
-
+- Null Model
 ```{r log_likelihood}
 # define compute function - log likelihood
 logLikelihood <- function(ypred, ytrue,epsilon=1e-6) {
@@ -592,11 +607,12 @@ for (v in catVars) {
   }
 }
 
-# sort by deviance desc
-select_cat_result <- arrange(select_cat_result, desc(deviance))
+# sort by deviance ASC
+select_cat_result <- arrange(select_cat_result, deviance)
 select_cat_result
 ```
-The result from categorical, penalties_order ...low deviance...,highest AUC(train0.56/test0.61).... 这里对上面这个数据写个结论，主要是结合前面的auc进行描述一下。
+The results show that penalties_order has the lowest deviance(10.30) in the categorical features, which means this feature is highly correlated with the target. It still has the highest AUC score (train0.56/test0.61).
+
 
 ```{r calculate_numerical_likelihood}
 # separate the expected and actual numerical columns
@@ -634,10 +650,10 @@ for (v in numericVars) {
   }
 }
 
-# sort by deviance desc
-sel_num_result <- arrange(sel_num_result, desc(deviance))
+# sort by deviance ASC
+sel_num_result <- arrange(sel_num_result, deviance)
 observe_selNumResult <-
-  arrange(observe_selNumResult, desc(deviance))
+  arrange(observe_selNumResult, deviance)
 
 # drop actual variable
 sel_num_result <-
@@ -645,8 +661,7 @@ sel_num_result <-
 sel_num_result$pred
 numericVars <- numericVars[!numericVars %in% actualVars]
 ```
-- Conclusion
-The lower the deviance, the better the model.
+The results show that pred_expected_goal_involvements_per_90 has the lowest deviance(3.27) in the numerical features, which still has the highest AUC score (train0.76/test0.80), which means this feature is highly correlated with the target. Meanwhile, the following numerical features still perform very low scores and high AUC scores. 
 
 
 ## Feature Selection
@@ -667,7 +682,8 @@ to fit.
 
 ### Concatenation Top-performance Features
 
-From the previous section, we have identified the following features that have good performance in predicting the target variable.
+From the previous section, we have identified the following features that have good performance in predicting the target variable. Then we use the first method to combine these features.
+
 
 ```{r feature_concatenation}
 extract_column <- function(tribble, column) {
@@ -691,6 +707,7 @@ combined_features
 ```
 
 #### Recursive Feature Elimination - Wrapped Methods
+Next we will use the RFE method to select features. RFE is a greedy optimization algorithm that aims to find the best performing feature subset. It repeatedly creates models and keeps aside the best or the worst performing feature at each iteration. It constructs the next model with the left features until all the features are exhausted. It then ranks the features based on the order of their elimination.
 
 ```{r RFE}
 rfe_train_data <- train_data %>% 
@@ -711,7 +728,7 @@ rfe_features
 ## Multiple Variables
 
 ## Methods for evaluating models
-According to the multiple usage, we define a function so that we can do multiple performance calculations. This function includes several main methods, such as confusion matrix, AUC, likelihood. It will be used in the following sections and increase the efficiency of the code. At the same time, it is convenient to compare the results of each model.
+According to the multiple usage, we define a function so that we can reuse it to do multiple performance calculations. This function includes several main methods, such as confusion matrix, AUC, and likelihood. It will be used in the following sections and increase the efficiency of the code. At the same time, it is convenient to compare the results of each model.
 
 ```{r main performance_measures function}
 #single performance result function
@@ -771,8 +788,6 @@ main_performance <-
 
 ### Decision Tree
 
-the performance on the test set is slightly better than on the training set,
-
 - Build models
 ```{r decision_tree models}
 #a tree model with the combined features by Concatenation - tmodel1
@@ -810,12 +825,6 @@ testPredictions2 <- predict(tmodel2, newdata=tree_test_data_2, type = "class")
 
 ```
 
-```{r}
-table_train_tmodel1<- table(train_data[, target], trainPredictions1)
-table_train_tmodel1
-```
-
-
 ```{r tmodel main performance_measures function }
 #calculate the performance measures for tmodel1 and tmodel2
 t1 <-
@@ -841,13 +850,10 @@ t2 <-
 tmodel_mainperformance <- rbind(t1, t2)
 tmodel_mainperformance
 ```
+From this table, firstly we can see that the performance of the two tree models are very similar. The difference of 2 models between train and test in the first 5 metrics are small, which around 0.02, it indicates 2 models are fit. 
+For the tree models, we also can see that Accuracy are more than 0.75, which indicates that can successfully accurate classification to predict the player type. Precision are more than 0.66 that seems fair enough. Recall have really highest score in all metrics, The high recall rate indicates that these tree models successfully captures most real positive samples.Tree models achieved a good balance between accuracy and recall with high F1 score(each > 0.76). AUC still good enough.
+Overall, these two tree models are good enough to predict the player type.
 
-
-
-```{r confusion_matrix}
-# table_train <- table(train_data[, target], predict_train)
-# table_train
-```
 
 ```{r}
 # define a ROC curve function
@@ -883,29 +889,30 @@ pred_train_roc1 <- predict(tmodel1, newdata = tree_train_data_1)
 pred_test_roc1 <- predict(tmodel1, newdata = tree_test_data_1)
 
 plot_roc(
-  pred_train_roc1[, 1],
+  pred_train_roc1[, 2],
   train_data$player_type,
-  pred_test_roc1[, 1],
+  pred_test_roc1[, 2],
   test_data$player_type,
   title = "ROC for tmodel1 (features by Concatenation)"
 )
 
 ```
-
+For tree model 1, the ROC curve is not very good. The AUC is 0.76/0.78(train/test), which is good. The ROC curve is not very close to the top left corner. However, there is little difference between the training data and the test data curve, which shows that the training data model has high accuracy.
 
 ```{r ROC curve - tmodel2}
 pred_train_roc2 <- predict(tmodel2, newdata = tree_train_data_2)
 pred_test_roc2 <- predict(tmodel2, newdata = tree_test_data_2)
 
 plot_roc(
-  pred_train_roc2[, 1],
+  pred_train_roc2[, 2],
   train_data$player_type,
-  pred_test_roc2[, 1],
+  pred_test_roc2[, 2],
   test_data$player_type,
   title = "ROC for tmodel2 (features by RFE)"
 )
 ```
-
+For tree model 2, the ROC curve performe not very well and the AUC is 0.77/0.79(train/test), which is a little bit better than tree model 1. The curve is not very close to the top left corner as well. Like other metrics that mentioned before, the two models behave very closely.
+Next, we visualise the decision tree for the two models.
 
 ```{r Visualising the decision tree}
 rpart.plot(tmodel1)
@@ -958,7 +965,7 @@ xgbmodel_1 <- xgboost(
 
 test_input_1 <- as.matrix(xgb_test_data_1[-c(1, 2)])
 
-
+#calculate the model prediction
 train_pred_xgb1 <- predict(xgbmodel_1, input_1)
 train_pred_xgb1_class <- ifelse(train_pred_xgb1 > 0.5, "Offensive", "Defensive")
 
@@ -968,21 +975,11 @@ test_pred_xgb1_class <- ifelse(test_pred_xgb1 > 0.5, "Offensive", "Defensive")
 
 print(calcAUC(train_pred_xgb1, xgb_train_data_1[, target]))
 print(calcAUC(test_pred_xgb1, xgb_test_data_1[, target]))
-# 
-# cv_results <- xgb.cv(
-#   data = as.matrix(train_data[, predictors]),
-#   label = train_data$target_variable,
-#   params = xgb_params,
-#   nrounds = 100,
-#   nfold = 5,
-#   stratified = TRUE,
-#   verbose = 0
-# )
-
 
 
 ```
 
+Next, we keep the same parameters and build another XGBoost model with features selected by RFE.
 
 ```{r xgboost_combine_2}
 # convert categorical variables to factor
@@ -1030,6 +1027,7 @@ print(calcAUC(test_pred_xgb2, xgb_test_data_2[, target]))
 
 ```
 
+
 - Performance for the above 2 models
 ```{r confusion_matrix table}
 #singlexgb<- single_performance(train_pred_xgb1, xgb_train_data_1$player_type,"xgb-Train")
@@ -1039,7 +1037,8 @@ xgb2_perf <- main_performance(train_pred_xgb2, test_pred_xgb2, xgb_train_data_2$
 xgb_pref <- rbind(xgb1_perf, xgb2_perf)
 xgb_pref
 ```
-
+The above table shows the performance of the two XGBoost models. Among all metrics, the disparity between their scores is minimal. Both models perform the highest recall and AUC, which are remarkably similar and close to 1. It suggests that the 2 models have excellent performance in this binary classification, but their adaptability and performance in other measures should be further assessed. The other remaining metrics (Accuracy, Precision, F1 score), all above 0.67, mostly about 0.76, which also shows that 2 models are effective. And log likelihoods are much better than NUll model.
+Overall, the performance of XGBoost 2 is slightly better than XGBoost 1. Then, We will use ROC to further evaluate the model in the next section.
 
 ```{r ROC - xgb1}
 pred_train_roc_xgb1 <- predict(xgbmodel_1, newdata = input_1)
@@ -1051,7 +1050,7 @@ plot_roc(pred_train_roc_xgb1,
          test_data$player_type,
          title = "ROC for XGBoost1 (features by Concatenation)")
 ```
-
+From this plot, we can see that the ROC curves are extremely close to Y axis and top left corner, which means that the model has a high true positive rate and a low false positive rate.
 
 ```{r ROC - xgb2}
 pred_train_roc_xgb2 <- predict(xgbmodel_2, newdata = input_2)
@@ -1063,13 +1062,14 @@ plot_roc(pred_train_roc_xgb2,
          test_data$player_type,
          title = "ROC for XGBoost2 (features by RFE)")
 ```
+For XGBoost 2, the ROC curves are also perform true positive rate and a low false positive rate like XGBoost 1.
+
 
 
 ## Models Evaluation
 
-
-
-## Explaining Models using LIME
+## LIME for Explaining Models
+In this section, we employ LIME to facilitate automated sanity checks on a few typical and extreme cases, helping us in model improvement.
 
 ```{r LIME}
 cases <- c(3,11,21,30)
@@ -1094,6 +1094,9 @@ print(explanation_2)
 plot_features(explanation_2)
 plot_explanations(explanation_2)
 ```
+We can see from the multiple plots and table that 结论.
+The feature "expected_goals_involvements_per_90" shows strong evidence for player type classification in many case.
+
 
 ## Performance Improve
 improve the models performances by implementing such measures:
@@ -1336,9 +1339,9 @@ final_decision_tree(join_train, join_test, decision_tree_metrics)
 final_xgb(join_train, join_test, xgb_params, xgb_metrics)
 ```
 
-## Discussion
+Discussion
 
-# Cluster
+#Part 3 - Cluster
 
 ## Clustering problem
 clustering different types of players based on their performance in the game
