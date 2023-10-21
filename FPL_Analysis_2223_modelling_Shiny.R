@@ -1,5 +1,4 @@
 library(shiny)
-library(async)
 library(tidyverse)
 library(rpart)
 library(gridExtra)
@@ -567,7 +566,7 @@ plot_auc_density <- function(data, features) {
     geom_density() +
     xlab(neg.label)
   
-  grid.arrange(p11, p21, ncol = 1)
+  grid.arrange(p1, p2, ncol = 1)
 }
 
 
@@ -963,51 +962,51 @@ server <- function(input, output) {
 
   
   # clustering
-  async({
-    kmClustering.ch <-
-      kmeansruns(cluster_scale_data,
-                 krange = 1:10,
-                 criterion = "ch")
-    kmClustering.asw <-
-      kmeansruns(cluster_scale_data,
-                 krange = 1:10,
-                 criterion = "asw")
-    kmCritframe <- data.frame(k = 1:10,
-                              ch = kmClustering.ch$crit,
-                              asw = kmClustering.asw$crit)
-    
-    output$clustering <- renderPlot({
-      groups <- input$groups
-      graph <- input$cluster_graph
-      
-      kmClusters <-
-        kmeans(
-          cluster_scale_data,
-          centers = groups,
-          iter.max = 100,
-          trace = T
-        )
-      
-      if (graph == 'cluster') {
-        clusters <- kmClusters$cluster
-        fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
-      } else if (graph == 'asw') {
-        fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-          geom_point() + geom_line(colour = "salmon") +
-          scale_x_continuous(breaks = 1:10, labels = 1:10) +
-          labs(y = "CH index") + theme(text = element_text(size = 20))
-        fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-          geom_point() + geom_line(colour = "dodgerblue") +
-          scale_x_continuous(breaks = 1:10, labels = 1:10) +
-          labs(y = "ASW") + theme(text = element_text(size = 20))
-        fig3 <-
-          fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
-        grid.arrange(fig1, fig2, fig3, ncol = 2)
-      }
-    })
-    
-  })
-  
+  # async({
+  #   kmClustering.ch <-
+  #     kmeansruns(cluster_scale_data,
+  #                krange = 1:10,
+  #                criterion = "ch")
+  #   kmClustering.asw <-
+  #     kmeansruns(cluster_scale_data,
+  #                krange = 1:10,
+  #                criterion = "asw")
+  #   kmCritframe <- data.frame(k = 1:10,
+  #                             ch = kmClustering.ch$crit,
+  #                             asw = kmClustering.asw$crit)
+  #
+    # output$clustering <- renderPlot({
+    #   groups <- input$groups
+    #   graph <- input$cluster_graph
+    # 
+    #   kmClusters <-
+    #     kmeans(
+    #       cluster_scale_data,
+    #       centers = groups,
+    #       iter.max = 100,
+    #       trace = T
+    #     )
+    # 
+    #   if (graph == 'cluster') {
+    #     clusters <- kmClusters$cluster
+    #     fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
+    #   } else if (graph == 'asw') {
+    #     fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
+    #       geom_point() + geom_line(colour = "salmon") +
+    #       scale_x_continuous(breaks = 1:10, labels = 1:10) +
+    #       labs(y = "CH index") + theme(text = element_text(size = 20))
+    #     fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
+    #       geom_point() + geom_line(colour = "dodgerblue") +
+    #       scale_x_continuous(breaks = 1:10, labels = 1:10) +
+    #       labs(y = "ASW") + theme(text = element_text(size = 20))
+    #     fig3 <-
+    #       fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
+    #     grid.arrange(fig1, fig2, fig3, ncol = 2)
+    #   }
+    # })
+
+  # })
+
 }
 
 # app
