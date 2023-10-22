@@ -394,10 +394,8 @@ xgb_model <- function(train_data, test_data, selected_features) {
   
   xgb_test_data <- test_data %>%
     select(all_of(c(target, selected_features))) %>%
-    mutate(
-      type = as.numeric(player_type == 'Offensive'),
-      .after = player_type
-    )
+    mutate(type = as.numeric(player_type == 'Offensive'),
+           .after = player_type)
   
   if ("penalties_order" %in% selected_features) {
     xgb_train_data <-
@@ -525,6 +523,17 @@ clustering_prepossessing <- function(data) {
     clustering_scale()
 }
 
+find_convex_hull <- function(proj2Ddf, groups) {
+  do.call(rbind,
+          lapply(
+            unique(groups),
+            FUN = function(c) {
+              f <- subset(proj2Ddf, cluster == c)
+              f[chull(f), ]
+            }
+          ))
+}
+
 # prepare raw data
 merge_raw_data <- function(raw_data_1, raw_data_2) {
   slim_data = raw_data_1
@@ -558,7 +567,7 @@ plot_auc_density <- function(data, features) {
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
-    xlab(pos.label) 
+    xlab(pos.label)
   p2 <-  data[, features] %>%
     filter(player_type == neg.label) %>%
     pivot_longer(2:count, names_to = "Type", values_to = "Value") %>%
@@ -573,7 +582,8 @@ plot_auc_density <- function(data, features) {
 plot_roc_class <-
   function(model_names,
            data_list,
-           predcol_list,title='') {
+           predcol_list,
+           title = '') {
     colors <- c(
       "salmon",
       "lightblue",
@@ -585,7 +595,7 @@ plot_roc_class <-
       "grey"
     )
     
-
+    
     
     for (i in 1:length(data_list)) {
       par(new = TRUE)
@@ -601,14 +611,14 @@ plot_roc_class <-
         values = FALSE
       )
     }
-
+    
     legend("bottomright",
            legend = model_names,
            col = colors,
            lty = 1)
     title(title)
     
-
+    
   }
 
 plot_roc_sa <-
@@ -636,10 +646,14 @@ plot_roc_sa <-
       )
       title(title)
     }
-    legend("bottomright",
-           legend = features,
-           col = colors,
-           lty = 1,ncol=2)
+    legend(
+      "bottomright",
+      legend = features,
+      col = colors,
+      cex = 0.7,
+      lty = 1,
+      ncol = 2
+    )
   }
 
 # ui
@@ -692,7 +706,8 @@ ui <-
           
           mainPanel(fluidRow(
             column(6, plotOutput("single_left")),
-            column(6, plotOutput("single_right"))
+            column(6, plotOutput("single_right")),
+            tableOutput("single_var_table")
           ))
         )
       )
@@ -733,7 +748,7 @@ ui <-
             ),
             
           ),
-          mainPanel(width = 9, plotOutput("classification"))
+          mainPanel(width = 9, plotOutput("classification"),tableOutput("classify_table"))
         )
       )
     ),
@@ -775,12 +790,22 @@ ui <-
               "cluster_graph",
               "Clustering Groups",
               choices = list("Cluster Plot" = 'cluster',
-                             "ASW Plot" = "asw"),
+                             "2D point" = '2D point'),
               selected = 4,
             ),
             
+            sliderInput(
+              "k_value_range",
+              "K Value Range",
+              min = 1,
+              max = 6,
+              value = c(2, 5),
+              step = 1
+            ),
+            
           ),
-          mainPanel(width = 8, plotOutput("clustering"))
+          
+          mainPanel(width = 8, plotOutput("clustering"),tableOutput("cluster_table"))
         )
       )
     )
@@ -798,9 +823,6 @@ server <- function(input, output) {
   
   # clustering
   cluster_scale_data <- clustering_prepossessing(fpl_raw_data)
-  
-  # remove raw data
-  rm(fpl_raw_data)
   
   output$single_left <- renderPlot({
     # category single variable
@@ -840,7 +862,7 @@ server <- function(input, output) {
     if (length(selected_numericVars) == 0) {
       return (NULL)
     }
-
+    
     
     num_return_list <-
       class_num_pred(selected_numericVars, class_train_data, class_test_data)
@@ -857,6 +879,10 @@ server <- function(input, output) {
         "ROC for Numerical Single Variable"
       )
     }
+  })
+  
+  output$single_var_table <- renderTable({
+    
   })
   
   # classification performance
@@ -877,22 +903,26 @@ server <- function(input, output) {
     tree_model(train_tree_data_cb2, test_tree_data_cb2, rfe_features)
   pred_train_tmodel2 <- tmodel2_list$train_pred
   pred_test_tmodel2 <- tmodel2_list$test_pred
-
-
+  
+  
   #build xbgboost models - filter out the features
-  train_xgb_data_cb1<-class_train_data[,c(target,combined_features)]
-  test_xgb_data_cb1<-class_test_data[,c(target,combined_features)]
-  train_xgb_data_cb2<-class_train_data[,c(target,rfe_features)]
-  test_xgb_data_cb2<-class_test_data[,c(target,rfe_features)]
+  train_xgb_data_cb1 <-
+    class_train_data[, c(target, combined_features)]
+  test_xgb_data_cb1 <-
+    class_test_data[, c(target, combined_features)]
+  train_xgb_data_cb2 <- class_train_data[, c(target, rfe_features)]
+  test_xgb_data_cb2 <- class_test_data[, c(target, rfe_features)]
   #xgb model 1
-  xgb1_list<-xgb_model(train_xgb_data_cb1,test_xgb_data_cb1,combined_features)
-  pred_train_xgb1<-xgb1_list$train_pred
-  pred_test_xgb1<-xgb1_list$test_pred
+  xgb1_list <-
+    xgb_model(train_xgb_data_cb1, test_xgb_data_cb1, combined_features)
+  pred_train_xgb1 <- xgb1_list$train_pred
+  pred_test_xgb1 <- xgb1_list$test_pred
   #xgb model 2
-  xgb2_list<-xgb_model(train_xgb_data_cb2,test_xgb_data_cb2,rfe_features)
-  pred_train_xgb2<-xgb2_list$train_pred
-  pred_test_xgb2<-xgb2_list$test_pred
- 
+  xgb2_list <-
+    xgb_model(train_xgb_data_cb2, test_xgb_data_cb2, rfe_features)
+  pred_train_xgb2 <- xgb2_list$train_pred
+  pred_test_xgb2 <- xgb2_list$test_pred
+  
   #Plotting
   output$classification <- renderPlot({
     selected_models_input <- input$model
@@ -937,77 +967,138 @@ server <- function(input, output) {
         dataset_list <- c(dataset_list,
                           list(train_xgb_data_cb1),
                           list(test_xgb_data_cb1))
-        pred_list <- c(pred_list, list(pred_train_xgb1),
+        pred_list <- c(pred_list,
+                       list(pred_train_xgb1),
                        list(pred_test_xgb1))
-        }
-      if ("Recursive Feature Elimination" %in% selected_features_input) {
-          model_names <- c(model_names, c("xgb2-train",
-                                          "xgb2-test"))
-          dataset_list <-
-            c(dataset_list,
-              list(train_xgb_data_cb2),
-              list(test_xgb_data_cb2))
-          pred_list <- c(pred_list,
-                         list(pred_train_xgb2),
-                         list(pred_test_xgb2))
-        }
       }
+      if ("Recursive Feature Elimination" %in% selected_features_input) {
+        model_names <- c(model_names, c("xgb2-train",
+                                        "xgb2-test"))
+        dataset_list <-
+          c(dataset_list,
+            list(train_xgb_data_cb2),
+            list(test_xgb_data_cb2))
+        pred_list <- c(pred_list,
+                       list(pred_train_xgb2),
+                       list(pred_test_xgb2))
+      }
+    }
     
     #check the input condition
     if (length(model_names) != 0) {
       plot_roc_class(model_names, dataset_list, pred_list)
     }
   })
-
-
+  
+  output$classify_table <- renderTable({
+    
+  })
+  
+  
   
   # clustering
-  # async({
-  #   kmClustering.ch <-
-  #     kmeansruns(cluster_scale_data,
-  #                krange = 1:10,
-  #                criterion = "ch")
-  #   kmClustering.asw <-
-  #     kmeansruns(cluster_scale_data,
-  #                krange = 1:10,
-  #                criterion = "asw")
-  #   kmCritframe <- data.frame(k = 1:10,
-  #                             ch = kmClustering.ch$crit,
-  #                             asw = kmClustering.asw$crit)
-  #
-    # output$clustering <- renderPlot({
-    #   groups <- input$groups
-    #   graph <- input$cluster_graph
-    # 
-    #   kmClusters <-
-    #     kmeans(
-    #       cluster_scale_data,
-    #       centers = groups,
-    #       iter.max = 100,
-    #       trace = T
-    #     )
-    # 
-    #   if (graph == 'cluster') {
-    #     clusters <- kmClusters$cluster
-    #     fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
-    #   } else if (graph == 'asw') {
-    #     fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-    #       geom_point() + geom_line(colour = "salmon") +
-    #       scale_x_continuous(breaks = 1:10, labels = 1:10) +
-    #       labs(y = "CH index") + theme(text = element_text(size = 20))
-    #     fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-    #       geom_point() + geom_line(colour = "dodgerblue") +
-    #       scale_x_continuous(breaks = 1:10, labels = 1:10) +
-    #       labs(y = "ASW") + theme(text = element_text(size = 20))
-    #     fig3 <-
-    #       fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
-    #     grid.arrange(fig1, fig2, fig3, ncol = 2)
-    #   }
-    # })
+  
+  output$clustering <- renderPlot({
+    groups <- input$groups
+    graph <- input$cluster_graph
+    
+    kmClusters <-
+      kmeans(
+        cluster_scale_data,
+        centers = groups,
+        iter.max = 100,
+        trace = T
+      )
+    
+    if (graph == 'cluster') {
+      clusters <- kmClusters$cluster
+      fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
+    }
+    #else if (graph == 'asw') {
+    #   fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
+    #     geom_point() + geom_line(colour = "salmon") +
+    #     scale_x_continuous(breaks = 1:10, labels = 1:10) +
+    #     labs(y = "CH index") + theme(text = element_text(size = 20))
+    #   fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
+    #     geom_point() + geom_line(colour = "dodgerblue") +
+    #     scale_x_continuous(breaks = 1:10, labels = 1:10) +
+    #     labs(y = "ASW") + theme(text = element_text(size = 20))
+    #   fig3 <-
+    #     fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
+    #   grid.arrange(fig1, fig2, fig3, ncol = 2)
+    # }
+    else if (graph == '2D point') {
+      princ <- prcomp(cluster_scale_data)
+      project2D <-
+        as.data.frame(predict(princ, newdata = cluster_scale_data)[, 1:2])
+      kvalues <- seq(input$k_value_range[1], input$k_value_range[2])
+      #fig_list <- list()
+      plot_list <- list()
 
-  # })
-
+      for (k in kvalues) {
+        groups <-
+          kmeans(cluster_scale_data,
+                 k,
+                 nstart = 100,
+                 iter.max = 100)$cluster
+        kmclust.project2D <- cbind(project2D,
+                                   cluster = as.factor(groups),
+                                   position = fpl_raw_data$position)
+        kmclust.hull <-
+          find_convex_hull(kmclust.project2D, groups)
+        # fig <-  paste0("fig", k)
+        # fig_list <- c(fig_list, fig)
+        # assign(
+        #   paste0("fig", k),
+        fig <- ggplot(kmclust.project2D, aes(x = PC1, y = PC2)) +
+          geom_point(aes(shape = cluster, color = cluster)) +
+          geom_polygon(
+            data = kmclust.hull,
+            aes(group = cluster, fill = cluster),
+            alpha = 0.4,
+            linetype = 0
+          ) +
+          labs(title = sprintf("k = %d", k)) +
+          theme(legend.position = "none",
+                text = element_text(size = 20))
+        plot_list <- c(plot_list, list(fig))
+      }
+      plotnum <- length(plot_list)
+      if (plotnum == 1) {
+        grid.arrange(plot_list[[1]])
+      } else if (plotnum == 2) {
+        grid.arrange(plot_list[[1]], plot_list[[2]], ncol = 2)
+      } else if (plotnum == 3) {
+        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], ncol = 2)
+      } else if (plotnum == 4) {
+        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], ncol = 2)
+      } else if (plotnum == 5) {
+        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], plot_list[[5]], ncol = 2)
+      } else if (plotnum == 6) {
+        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], plot_list[[5]], plot_list[[6]], ncol = 2)
+      }
+      # grid.arrange(fig1,fig2, fig3, fig4, fig5, fig6, nrow = 2)
+    }
+  })
+  
 }
+
+output$cluster_table <- renderTable({
+  
+})
+
+#       print(length(fig_list))
+#
+#       grid.arrange(fig2, fig3, fig4, fig5, fig6, nrow = 2)
+#
+#     }
+#
+#
+#   }
+# })
+
+
+
 
 # app
 shinyApp(ui, server)
