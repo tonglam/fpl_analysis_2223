@@ -24,10 +24,10 @@ catVars <-
     "direct_freekicks_order",
     "corners_and_indirect_freekicks_order"
   )
-numericVars <-
+numVars <-
   c(
-    "clean_sheets_per_90",
     "expected_assists_per_90",
+    "goals_per_90",
     "penalties_missed",
     "starts_per_90",
     "expected_goals_conceded_per_90",
@@ -40,34 +40,41 @@ numericVars <-
     "own_goals_per_90",
     "yellow_cards_per_90",
     "expected_goal_involvements_per_90",
+    "assists_per_90",
     "ict_index",
     "minutes_per_90",
-    "expected_goals_per_90"
+    "expected_goals_per_90",
+    "goals_conceded_per_90"
   )
 
 selected_catVars <- catVars
 selected_numericVars <-
   c(
     "starts_per_90",
-    "expected_goal_involvements_per_90",
+    "goals_per_90",
+    "penalties_saved",
     "expected_goals_per_90",
-    "expected_assists_per_90"
+    "assists_per_90"
   )
 
 combined_features <-
-  c(
+   c(          
     "penalties_order",
-    "threat_per_90",
     "expected_goal_involvements_per_90",
-    "creativity_per_90",
+    "threat_per_90",
     "expected_goals_per_90",
+    "creativity_per_90",
+    "goals_per_90",
+    "goals_conceded_per_90",
     "expected_assists_per_90",
-    "ict_index",
-    "influence_per_90",
+    "assists_per_90",
     "saves_per_90",
+    "ict_index",
     "starts_per_90",
-    "own_goals_per_90",
-    "penalties_saved"
+    "influence_per_90",
+    "minutes_per_90",
+    "penalties_saved",
+    "penalties_missed"
   )
 
 rfe_features <-
@@ -207,8 +214,8 @@ class_transform <- function(data) {
 class_spilt <- function(data, ratio = spilt_ratio) {
   set.seed(500)
   fortrain <- runif(nrow(data)) < ratio
-  train_data <- data[fortrain,]
-  test_data <- data[!fortrain,]
+  train_data <- data[fortrain, ]
+  test_data <- data[!fortrain, ]
   outCol <- names(train_data)[-c(1, 2)]
   vars <- setdiff(outCol, c('player_type', "player_type_value"))
   return(list(train = train_data, test = test_data))
@@ -228,7 +235,7 @@ class_mkPredC <- function(outCol, varCol, appCol, pos = pos.label) {
   naTab <- table(as.factor(outCol[is.na(varCol)]))
   pPosWna <- (naTab / sum(naTab))[pos]
   vTab <- table(as.factor(outCol), varCol)
-  pPosWv <- (vTab[pos, ] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
+  pPosWv <- (vTab[pos,] + 1.0e-3 * pPos) / (colSums(vTab) + 1.0e-3)
   pred <- pPosWv[appCol]
   pred[is.na(appCol)] <- pPosWna
   pred[is.na(pred)] <- pPos
@@ -270,7 +277,7 @@ calcAUC <- function(predcol, outcol, pos = pos.label) {
 }
 
 class_single_performance <- function(train_data, test_data, vars) {
-  result <- tribble(~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
+  result <- tribble( ~ feature, ~ type, ~ pred, ~ trainAUC, ~ testAUC)
   categorical_vars <-
     vars[sapply(train_data[, vars], class) %in% c('factor', 'character')]
   numerical_vars <-
@@ -315,8 +322,88 @@ class_single_performance <- function(train_data, test_data, vars) {
         testAUC = aucTest
       )
   }
-  
   return(result)
+}
+
+# log likelihood
+calc_log_likelihood <- function(ypred, ytrue, epsilon = 1e-6) {
+  log_likelihood <-
+    sum(ifelse(ytrue, log(ypred), log(1 - ypred - epsilon)), na.rm = T)
+  return(log_likelihood)
+}
+
+calc_null_log_likelihood <- function(data, epsilon = 1e-6) {
+  null_log_likelihood <-
+    calc_log_likelihood(sum(data[[target]] == pos.label) / nrow(data),
+                        data[[target]] == pos.label)
+  return(null_log_likelihood)
+}
+
+calc_drop_deviance <- function(ypred, ytrue, data, epsilon = 1e-6) {
+  null_log_likelihood <- calc_null_log_likelihood(data)
+  model_log_likelihood <- calc_log_likelihood(ypred, ytrue, epsilon)
+  drop_deviance <- 2 * (model_log_likelihood - null_log_likelihood)
+  return(drop_deviance)
+}
+
+calc_auc <- function(predcol, outcol, pos = pos.label) {
+  perf <- performance(prediction(predcol, outcol == pos), 'auc')
+  as.numeric(perf@y.values)
+}
+
+# evaluation result
+single_evaluation <- function(train_data, test_data, vars) {
+  varResult <-
+    tribble(~ Type,
+            ~ Pred_Variable,
+            ~ Log_Likelihood,
+            ~ Drop_Deviance,
+            ~ Train_AUC,
+            ~ Test_AUC)
+  for (v in vars) {
+    type <- ''
+    if (v %in% catVars) {
+      type <- 'categorical'
+    } else if (v %in% numVars) {
+      type <- 'numerical'
+    }
+    pred_variable <- paste('pred_', v, sep = '')
+    log_likelihood <-
+      calc_log_likelihood(train_data[[pred_variable]], train_data[[target]] == pos.label)
+    drop_deviance <-
+      calc_drop_deviance(train_data[[pred_variable]], train_data[[target]] == pos.label, train_data)
+    train_auc <-
+      calc_auc(train_data[, pred_variable], train_data[[target]])
+    test_auc <-
+      calc_auc(test_data[, pred_variable], test_data[[target]])
+    
+    varResult <-
+      add_row(
+        varResult,
+        Type = type,
+        Pred_Variable = pred_variable,
+        Log_Likelihood = log_likelihood,
+        Drop_Deviance = drop_deviance,
+        Train_AUC = train_auc,
+        Test_AUC = test_auc
+      )
+  }
+  
+  varResult <- arrange(varResult, type, desc(Log_Likelihood))
+  
+  # add null model values
+  varResult <- add_row(
+    varResult,
+    Type = 'Null Model',
+    Pred_Variable = 'Null Model',
+    Log_Likelihood = calc_null_log_likelihood(train_data),
+    Drop_Deviance = 0,
+    Train_AUC = 0.5,
+    Test_AUC = 0.5,
+    .before = 1
+  )
+  
+  return (varResult)
 }
 
 class_model_performance <- function(pred, truth, name = "model") {
@@ -360,6 +447,69 @@ class_model_performance <- function(pred, truth, name = "model") {
   )
 }
 
+
+model_evaluation <-
+  function(pred,
+           truth,
+           name = "model",
+           threshold = 0.5) {
+    # data preparation
+    if (str_detect(name, "XGBoost")) {
+      pred_class <- ifelse(pred > threshold, pos.label, neg.label)
+      truth_class <-
+        ifelse(truth > threshold, pos.label, neg.label)
+    }
+    factor_pred <- pred
+    if (class(pred) != "factor") {
+      if (str_detect(name, "XGBoost")) {
+        factor_pred <- as.factor(pred_class)
+      } else{
+        factor_pred <- as.factor(pred)
+      }
+    }
+    factor_truth <- truth
+    if (class(truth) != "factor") {
+      factor_truth <- as.factor(truth)
+    }
+    # metrics calculation
+    cm <- confusionMatrix(factor_pred, factor_truth)
+    accuracy <- cm$overall['Accuracy']
+    precision <- cm$byClass['Pos Pred Value']
+    recall <- cm$byClass['Sensitivity']
+    f1 <- cm$byClass['F1']
+    
+    if (str_detect(name, "Decision Tree")) {
+      pred <- as.numeric(pred)
+    }
+    AUC <- calc_auc(pred, truth)
+    # store the result
+    result <- data.frame(
+      Model = name,
+      Accuracy = accuracy,
+      Precision = precision,
+      Recall = recall,
+      F1 = f1,
+      AUC = AUC
+    )
+    row.names(result) <- NULL
+    return (result)
+  }
+
+
+model_performance <-
+  function(train_pred,
+           test_pred,
+           train_truth,
+           test_truth,
+           name = "model") {
+    train_performance <-
+      model_evaluation(train_pred, train_truth, paste(name, "- Train"))
+    test_performance <-
+      model_evaluation(test_pred, test_truth, paste(name, "- Test"))
+    return(rbind(train_performance, test_performance))
+  }
+
+
 tree_model <- function(train_data, test_data, selected_features) {
   tree_model <-
     rpart(player_type ~ ., data = train_data, method = 'class')
@@ -386,13 +536,13 @@ tree_model <- function(train_data, test_data, selected_features) {
   )
 }
 
-xgb_model <- function(train_data, test_data, selected_features) {
-  xgb_train_data <- train_data %>%
+xgb_model <- function(selected_features) {
+  xgb_train_data <- class_train_data %>%
     select(all_of(c(target, selected_features))) %>%
     mutate(type = as.numeric(player_type == 'Offensive'),
            .after = player_type)
   
-  xgb_test_data <- test_data %>%
+  xgb_test_data <- class_test_data %>%
     select(all_of(c(target, selected_features))) %>%
     mutate(type = as.numeric(player_type == 'Offensive'),
            .after = player_type)
@@ -508,7 +658,7 @@ clustering_OHE <- function(data) {
     dummyVars(paste("~", paste(cat_col, collapse = "+")), data = data) %>%
     predict(newdata = data)
   return_data <-
-    cbind(encoded_data, data[, -which(names(data) %in% cat_col)])
+    cbind(encoded_data, data[,-which(names(data) %in% cat_col)])
   return(return_data)
 }
 
@@ -529,7 +679,7 @@ find_convex_hull <- function(proj2Ddf, groups) {
             unique(groups),
             FUN = function(c) {
               f <- subset(proj2Ddf, cluster == c)
-              f[chull(f), ]
+              f[chull(f),]
             }
           ))
 }
@@ -544,7 +694,7 @@ merge_raw_data <- function(raw_data_1, raw_data_2) {
   }
   diff_columns <- setdiff(names(wide_data), names(slim_data))
   wide_data <-
-    wide_data[, -which(names(wide_data) %in% diff_columns)]
+    wide_data[,-which(names(wide_data) %in% diff_columns)]
   return (union(slim_data, wide_data))
 }
 
@@ -574,10 +724,8 @@ plot_auc_density <- function(data, features) {
     ggplot(aes(x = Value, color = Type)) +
     geom_density() +
     xlab(neg.label)
-  
   grid.arrange(p1, p2, ncol = 1)
 }
-
 
 plot_roc_class <-
   function(model_names,
@@ -594,9 +742,6 @@ plot_roc_class <-
       "yellow",
       "grey"
     )
-    
-    
-    
     for (i in 1:length(data_list)) {
       par(new = TRUE)
       data <- data_list[[i]]
@@ -611,14 +756,11 @@ plot_roc_class <-
         values = FALSE
       )
     }
-    
     legend("bottomright",
            legend = model_names,
            col = colors,
            lty = 1)
     title(title)
-    
-    
   }
 
 plot_roc_sa <-
@@ -656,6 +798,17 @@ plot_roc_sa <-
     )
   }
 
+# read data
+fpl_raw_data <- read_data()
+
+# classification
+class_result_list <- class_prepossessing(fpl_raw_data)
+class_train_data <- class_result_list$train
+class_test_data <- class_result_list$test
+
+# clustering
+cluster_scale_data <- clustering_prepossessing(fpl_raw_data)
+
 # ui
 ui <-
   navbarPage(
@@ -675,7 +828,7 @@ ui <-
                      }"
           )
         )),
-        div(class = "title", "Single Variable"),
+        div(class = "title", "Single Variable Performance"),
         
         sidebarLayout(
           sidebarPanel(
@@ -698,17 +851,18 @@ ui <-
             checkboxGroupInput(
               "numerical",
               "Numerical Variables",
-              choices = numericVars,
+              choices = numVars,
               selected = selected_numericVars
             ),
             
           ),
           
-          mainPanel(fluidRow(
-            column(6, plotOutput("single_left")),
-            column(6, plotOutput("single_right")),
-            tableOutput("single_var_table")
-          ))
+          mainPanel(
+            fluidRow(column(6, plotOutput("single_left")),
+                     column(6, plotOutput("single_right")),),
+            tableOutput("single_cat_var_table"),
+            tableOutput("single_num_var_table"),
+          )
         )
       )
     ),
@@ -748,7 +902,11 @@ ui <-
             ),
             
           ),
-          mainPanel(width = 9, plotOutput("classification"),tableOutput("classify_table"))
+          mainPanel(
+            width = 9,
+            plotOutput("classification"),
+            tableOutput("classify_table")
+          )
         )
       )
     ),
@@ -768,11 +926,19 @@ ui <-
           )
         )),
         
-        div(class = "title", "Clustering"),
+        div(class = "title", "Clustering Result"),
         
         sidebarLayout(
           sidebarPanel(
             width = 2,
+            
+            selectInput(
+              "cluster_graph",
+              "Graph",
+              choices = list("Cluster Plot" = 'cluster',
+                             "2D point" = '2D point'),
+              selected = 4,
+            ),
             
             selectInput(
               "groups",
@@ -783,14 +949,6 @@ ui <-
                 "5" = 5,
                 "6" = 6
               ),
-              selected = 4,
-            ),
-            
-            selectInput(
-              "cluster_graph",
-              "Clustering Groups",
-              choices = list("Cluster Plot" = 'cluster',
-                             "2D point" = '2D point'),
               selected = 4,
             ),
             
@@ -805,7 +963,11 @@ ui <-
             
           ),
           
-          mainPanel(width = 8, plotOutput("clustering"),tableOutput("cluster_table"))
+          mainPanel(
+            width = 8,
+            plotOutput("clustering"),
+            tableOutput("cluster_table")
+          )
         )
       )
     )
@@ -813,17 +975,6 @@ ui <-
 
 # server
 server <- function(input, output) {
-  # read data
-  fpl_raw_data <- read_data()
-  
-  # classification
-  class_result_list <- class_prepossessing(fpl_raw_data)
-  class_train_data <- class_result_list$train
-  class_test_data <- class_result_list$test
-  
-  # clustering
-  cluster_scale_data <- clustering_prepossessing(fpl_raw_data)
-  
   output$single_left <- renderPlot({
     # category single variable
     selected_cat_input <- input$categorical
@@ -850,7 +1001,7 @@ server <- function(input, output) {
                   "ROC for Categorical Single Variable")
     }
   })
-  
+  #set up the plot output
   output$single_right <- renderPlot({
     # numerical single variable
     selected_num_input <- input$numerical
@@ -862,7 +1013,6 @@ server <- function(input, output) {
     if (length(selected_numericVars) == 0) {
       return (NULL)
     }
-    
     
     num_return_list <-
       class_num_pred(selected_numericVars, class_train_data, class_test_data)
@@ -881,10 +1031,51 @@ server <- function(input, output) {
     }
   })
   
-  output$single_var_table <- renderTable({
-    
+  output$single_cat_var_table <- renderTable({
+    selected_cat_input <- input$categorical
+    selected_catVars <- c()
+    for (i in 1:length(selected_cat_input)) {
+      value = selected_cat_input[[i]]
+      selected_catVars <- c(selected_catVars, value)
+    }
+    if (length(selected_catVars) == 0) {
+      return (NULL)
+    }
+    cat_return_list <-
+      class_cat_pred(selected_catVars, class_train_data, class_test_data)
+    single_cat_train_data <- cat_return_list$train
+    single_cat_test_data <- cat_return_list$test
+    if (length(selected_catVars) == 0) {
+      return (NULL)
+    }
+    cat_evaluation <-
+      single_evaluation(single_cat_train_data,
+                        single_cat_test_data,
+                        selected_catVars)
   })
   
+  output$single_num_var_table <- renderTable({
+    selected_num_input <- input$numerical
+    selected_numVars <- c()
+    for (i in 1:length(selected_num_input)) {
+      value = selected_num_input[[i]]
+      selected_numVars <- c(selected_numVars, value)
+    }
+    if (length(selected_numVars) == 0) {
+      return (NULL)
+    }
+    num_return_list <-
+      class_num_pred(selected_numVars, class_train_data, class_test_data)
+    single_num_train_data <- num_return_list$train
+    single_num_test_data <- num_return_list$test
+    if (length(selected_numVars) == 0) {
+      return (NULL)
+    }
+    num_evaluation <-
+      single_evaluation(single_num_train_data,
+                        single_num_test_data,
+                        selected_numVars)
+  })
   # classification performance
   # build decision tree models - filter out the features
   train_tree_data_cb1 <-
@@ -893,37 +1084,34 @@ server <- function(input, output) {
     class_test_data[, c(target, combined_features)]
   train_tree_data_cb2 <- class_train_data[, c(target, rfe_features)]
   test_tree_data_cb2 <- class_test_data[, c(target, rfe_features)]
-  #tree model 1
+  # tree model 1
   tmodel1_list <-
     tree_model(train_tree_data_cb1, test_tree_data_cb1, combined_features)
   pred_train_tmodel1 <- tmodel1_list$train_pred
   pred_test_tmodel1 <- tmodel1_list$test_pred
-  #tree model 2
+  # tree model 2
   tmodel2_list <-
     tree_model(train_tree_data_cb2, test_tree_data_cb2, rfe_features)
   pred_train_tmodel2 <- tmodel2_list$train_pred
   pred_test_tmodel2 <- tmodel2_list$test_pred
   
-  
-  #build xbgboost models - filter out the features
+  # build xbgboost models - filter out the features
   train_xgb_data_cb1 <-
     class_train_data[, c(target, combined_features)]
   test_xgb_data_cb1 <-
     class_test_data[, c(target, combined_features)]
   train_xgb_data_cb2 <- class_train_data[, c(target, rfe_features)]
   test_xgb_data_cb2 <- class_test_data[, c(target, rfe_features)]
-  #xgb model 1
-  xgb1_list <-
-    xgb_model(train_xgb_data_cb1, test_xgb_data_cb1, combined_features)
+  # xgb model 1
+  xgb1_list <- xgb_model(combined_features)
   pred_train_xgb1 <- xgb1_list$train_pred
   pred_test_xgb1 <- xgb1_list$test_pred
-  #xgb model 2
-  xgb2_list <-
-    xgb_model(train_xgb_data_cb2, test_xgb_data_cb2, rfe_features)
+  # xgb model 2
+  xgb2_list <- xgb_model(rfe_features)
   pred_train_xgb2 <- xgb2_list$train_pred
   pred_test_xgb2 <- xgb2_list$test_pred
   
-  #Plotting
+  # Plotting
   output$classification <- renderPlot({
     selected_models_input <- input$model
     selected_features_input <- input$feature
@@ -931,9 +1119,9 @@ server <- function(input, output) {
     model_names <- c()
     dataset_list <- list()
     pred_list <- list()
-    #set the checkbox condition
+    #vset the checkbox condition
     if ("Decision Tree" %in% selected_models_input) {
-      #add data into the list
+      # add data into the list
       if ("Concatenation" %in% selected_features_input) {
         model_names <- c(model_names, c("tmodel1-train",
                                         "tmodel1-test"))
@@ -957,7 +1145,6 @@ server <- function(input, output) {
             list(pred_train_tmodel2[, 2]),
             list(pred_test_tmodel2[, 2]))
       }
-      
     }
     
     if ("XGBoost" %in% selected_models_input) {
@@ -984,20 +1171,115 @@ server <- function(input, output) {
       }
     }
     
-    #check the input condition
+    # check the input condition
     if (length(model_names) != 0) {
       plot_roc_class(model_names, dataset_list, pred_list)
     }
   })
-  
+  # set up the table output - classification
   output$classify_table <- renderTable({
+    # selected_models_input <- input$model
+    # selected_features_input <- input$feature
     
+    
+    
+    # log_null_model_comparison <- null_model_comparison(class_train_data)
+    # if ("Decision Tree" %in% selected_models_input) {
+    #   if ("Concatenation" %in% selected_features_input) {
+    #     dt_comparision1 <-
+    #       model_comparison(
+    #         as.numeric(pred_train_tmodel1),
+    #         ifelse(train_tree_data_cb1[[target]] == pos.label, 1, 2),
+    #         train_tree_data_cb1,
+    #         "Decision Tree (Concatenation)"
+    #       )
+    #     comparision_list <- c(comparision_list, list(dt_comparision1))
+    #   }
+    #   if ("Recursive Feature Elimination" %in% selected_features_input) {
+    #     dt_comparision2 <-
+    #       model_comparison(
+    #         as.numeric(pred_train_tmodel2),
+    #         ifelse(train_tree_data_cb2[[target]] == pos.label, 1, 2),
+    #         train_tree_data_cb2,
+    #         "Decision Tree (RFE)"
+    #       )
+    #     comparision_list <- c(comparision_list, list(dt_comparision2))
+    #   }
+    # }
+    # if ("XGBoost" %in% selected_models_input) {
+    #   if ("Concatenation" %in% selected_features_input) {
+    #     xgb_comparision1 <-
+    #       model_comparison(
+    #         ifelse(xgb_train_pred_class1 == pos.label, 1, 2),
+    #         ifelse(xgb_train_data1[[target]]  == pos.label, 1, 2),
+    #         xgb_train_data1,
+    #         "XGBoost (Concatenation)"
+    #       )
+    #     comparision_list <- c(comparision_list, list(xgb_comparision1))
+    #   }
+    #   if ("Recursive Feature Elimination" %in% selected_features_input) {
+    #     xgb_comparision2 <-
+    #       model_comparison(
+    #         ifelse(xgb_train_pred_class2 == pos.label, 1, 2),
+    #         ifelse(xgb_train_data2[[target]] == pos.label, 1, 2),
+    #         xgb_train_data2,
+    #         "XGBoost (RFE)"
+    #       )
+    #     comparision_list <- c(comparision_list, list(xgb_comparision2))
+    #   }
+    # }
+    #
+    # # combine
+    # select_perform <- rbind(
+    #   log_null_model_comparison,
+    #   dt_comparision1,
+    #   dt_comparision2,
+    #   xgb_comparision1,
+    #   xgb_comparision2
+    # )
+    dt_performance1 <-
+      model_performance(
+        tmodel1_list$train_pred_class,
+        tmodel1_list$test_pred_class,
+        train_tree_data_cb1$player_type,
+        test_tree_data_cb1$player_type,
+        "Decision Tree (Concatenation)"
+      )
+    
+    dt_performance2 <-
+      model_performance(
+        tmodel2_list$train_pred_class,
+        tmodel2_list$test_pred_class,
+        train_tree_data_cb2$player_type,
+        test_tree_data_cb2$player_type,
+        "Decision Tree (RFE)"
+      )
+    
+    xgb_performance1 <-
+      model_performance(
+        pred_train_xgb1,
+        pred_test_xgb1,
+        train_xgb_data_cb1$player_type,
+        test_xgb_data_cb1$player_type,
+        "XGBoost (Concatenation)"
+      )
+    
+    xgb_performance2 <-
+      model_performance(
+        pred_train_xgb2,
+        pred_test_xgb2,
+        train_xgb_data_cb2$player_type,
+        test_xgb_data_cb2$player_type,
+        "XGBoost (RFE)"
+      )
+    allmodel_performance <-
+      rbind(dt_performance1,
+            dt_performance2,
+            xgb_performance1,
+            xgb_performance2)
   })
   
-  
-  
   # clustering
-  
   output$clustering <- renderPlot({
     groups <- input$groups
     graph <- input$cluster_graph
@@ -1007,34 +1289,18 @@ server <- function(input, output) {
         cluster_scale_data,
         centers = groups,
         iter.max = 100,
-        trace = T
+        trace = F
       )
     
     if (graph == 'cluster') {
       clusters <- kmClusters$cluster
       fviz_cluster(list(data = cluster_scale_data, cluster = clusters))
-    }
-    #else if (graph == 'asw') {
-    #   fig1 <- ggplot(kmCritframe, aes(x = k, y = ch)) +
-    #     geom_point() + geom_line(colour = "salmon") +
-    #     scale_x_continuous(breaks = 1:10, labels = 1:10) +
-    #     labs(y = "CH index") + theme(text = element_text(size = 20))
-    #   fig2 <- ggplot(kmCritframe, aes(x = k, y = asw)) +
-    #     geom_point() + geom_line(colour = "dodgerblue") +
-    #     scale_x_continuous(breaks = 1:10, labels = 1:10) +
-    #     labs(y = "ASW") + theme(text = element_text(size = 20))
-    #   fig3 <-
-    #     fviz_cluster(list(data = cluster_scale_data, cluster = kmClusters$cluster))
-    #   grid.arrange(fig1, fig2, fig3, ncol = 2)
-    # }
-    else if (graph == '2D point') {
+    } else if (graph == '2D point') {
       princ <- prcomp(cluster_scale_data)
       project2D <-
         as.data.frame(predict(princ, newdata = cluster_scale_data)[, 1:2])
       kvalues <- seq(input$k_value_range[1], input$k_value_range[2])
-      #fig_list <- list()
       plot_list <- list()
-
       for (k in kvalues) {
         groups <-
           kmeans(cluster_scale_data,
@@ -1046,10 +1312,6 @@ server <- function(input, output) {
                                    position = fpl_raw_data$position)
         kmclust.hull <-
           find_convex_hull(kmclust.project2D, groups)
-        # fig <-  paste0("fig", k)
-        # fig_list <- c(fig_list, fig)
-        # assign(
-        #   paste0("fig", k),
         fig <- ggplot(kmclust.project2D, aes(x = PC1, y = PC2)) +
           geom_point(aes(shape = cluster, color = cluster)) +
           geom_polygon(
@@ -1073,32 +1335,26 @@ server <- function(input, output) {
       } else if (plotnum == 4) {
         grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], ncol = 2)
       } else if (plotnum == 5) {
-        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], plot_list[[5]], ncol = 2)
+        grid.arrange(plot_list[[1]],
+                     plot_list[[2]],
+                     plot_list[[3]],
+                     plot_list[[4]],
+                     plot_list[[5]],
+                     ncol = 2)
       } else if (plotnum == 6) {
-        grid.arrange(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], plot_list[[5]], plot_list[[6]], ncol = 2)
+        grid.arrange(
+          plot_list[[1]],
+          plot_list[[2]],
+          plot_list[[3]],
+          plot_list[[4]],
+          plot_list[[5]],
+          plot_list[[6]],
+          ncol = 2
+        )
       }
-      # grid.arrange(fig1,fig2, fig3, fig4, fig5, fig6, nrow = 2)
     }
   })
-  
 }
-
-output$cluster_table <- renderTable({
-  
-})
-
-#       print(length(fig_list))
-#
-#       grid.arrange(fig2, fig3, fig4, fig5, fig6, nrow = 2)
-#
-#     }
-#
-#
-#   }
-# })
-
-
-
 
 # app
 shinyApp(ui, server)
